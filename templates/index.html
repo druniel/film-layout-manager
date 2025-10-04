@@ -60,33 +60,109 @@
         </tbody>
     </table>
     <br>
-    <button onclick="fetchData()">Vytvoř carousely</button>
+    <button id="fetchButton" onclick="fetchData()">Doplň unikátní filmy</button>
+    <button id="doplnButton" onclick="doplnData()">Doplň zbytek filmů</button>
+    <button id="resetButton" onclick="resetData()">Resetovat data</button>
 
     <script>
-        async function fetchData() {
+    async function fetchData() {
+        try {
             const response = await fetch('/spustit');
-            const data = await response.json(); // dostaneš pole 10×N
-    
+            if (!response.ok) {
+                const errorData = await response.json();
+                alert(`Error: ${errorData.error || 'Something went wrong'}`);
+                return;
+            }
+            const data = await response.json();
+
             const table = document.getElementById('filmTable');
             const tbody = table.querySelector('tbody');
             tbody.innerHTML = '';
-    
+
             data.forEach((radek, index) => {
                 const tr = document.createElement('tr');
                 
                 const tdTitle = document.createElement('td');
                 tdTitle.textContent = `Film ${index + 1}`;
                 tr.appendChild(tdTitle);
-    
+
                 radek.forEach(film => {
                     const td = document.createElement('td');
-                    td.textContent = film || '';  // prázdné buňky nezobrazuj
+                    td.textContent = film || '';
                     tr.appendChild(td);
                 });
-    
+
                 tbody.appendChild(tr);
             });
+        } catch (error) {
+            alert(`Failed to fetch data: ${error.message}`);
         }
+    }
+</script>
+
+<script>
+    async function doplnData() {
+        try {
+            const response = await fetch('/spustit_doplneni');
+            if (!response.ok) {
+                const errorData = await response.json();
+                alert(`Error: ${errorData.error || 'Something went wrong'}`);
+                return;
+            }
+            const data = await response.json();
+
+            const table = document.getElementById('filmTable');
+            const tbody = table.querySelector('tbody');
+            tbody.innerHTML = '';
+
+            data.forEach((radek, index) => {
+                const tr = document.createElement('tr');
+                
+                const tdTitle = document.createElement('td');
+                tdTitle.textContent = `Film ${index + 1}`;
+                tr.appendChild(tdTitle);
+
+                radek.forEach(film => {
+                    const td = document.createElement('td');
+                    td.textContent = film || '';
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            alert(`Failed to fetch data: ${error.message}`);
+        }
+    }
+</script>
+<script>
+    async function resetData() {
+        try {
+            const response = await fetch('/reset');
+            if (!response.ok) {
+                const errorData = await response.json();
+                alert(`Error: ${errorData.error || 'Something went wrong'}`);
+                return;
+            }
+
+            const table = document.getElementById('filmTable');
+            const tbody = table.querySelector('tbody');
+            tbody.innerHTML = '';
+
+            // Recreate the default empty table with 10 rows
+            for (let i = 1; i <= 10; i++) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.textContent = `Film ${i}`;
+                tr.appendChild(td);
+                tbody.appendChild(tr);
+            }
+
+            alert('Data byla úspěšně resetována');
+        } catch (error) {
+            alert(`Failed to reset data: ${error.message}`);
+        }
+    }
     </script>
 </body>
 </html>

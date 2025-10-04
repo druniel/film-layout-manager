@@ -1,3 +1,3 @@
--opravdové náhodné pořadí
--revidovat proces exkluzivního výběru
--revidovat proces doplňování zbytku
+-copilot
+-kód uhladit
+odinstalovat dependencies z global

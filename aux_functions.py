@@ -6,8 +6,8 @@ prioritni_kategorie = [
     "Obsah zdarma", "Pro děti", "Biblické filmy",
     "Originální produkce", "Seriály", "Rodinné filmy"
 ]
-max_pocet_radku = {"Plné velikosti": 3, "Náš výběr": 5, "Náš výběr z internetu": 10}
 
+max_pocet_radku = {"Plné velikosti": 3, "Náš výběr": 5, "Náš výběr z internetu": 10}
 
 # Pomocné funkce
 def get_volna_mista(tabulka, kategorie, max_pocet_radku):
@@ -31,9 +31,9 @@ def kategorie_filmu(row, kategorie):
     return [kat for kat, val in zip(kategorie, bool_hodnoty) if val == "true"]
 
 
-def vloz_prioritni_film(tabulka, film, kategorie_filmu, kategorie, film_to_col):
+def vloz_prioritni_film(tabulka, film, kategorie_filmu, kategorie, film_to_col, priorita):
     for kat in prioritni_kategorie:
-        if kat in kategorie_filmu:
+        if kat in kategorie_filmu and priorita <= 2:
             col_index = kategorie.index(kat)
             for radek in range(10):
                 if tabulka[radek][col_index] is None:
@@ -48,30 +48,50 @@ def dopln_buffer(tabulka, buffer, film_to_col, kategorie, max_pocet_radku, rebuf
         rebuffer = []
 
     np.random.shuffle(buffer)
-    buffer.sort(key=lambda x: len(x[1]), reverse=True)
+    buffer.sort(key=lambda x: len(x[2]), reverse=True)
 
     for index in range(len(buffer) - 1, -1, -1):
-        film, kat_filmu = buffer[index]
-        np.random.shuffle(kat_filmu)
+        priorita, film, kat_filmu = buffer[index]
         vlozeno = False
-
-        for kat in kat_filmu:
-            col_index = kategorie.index(kat)
-            max_radku = max_pocet_radku.get(kat, 10)
-            for radek in range(max_radku):
-                if tabulka[radek][col_index] is None:
-                    if "Dokumenty" not in kat_filmu:
+        
+        if kat_filmu == ["Dokumenty"]:
+            if priorita <= 2:
+                col_index = kategorie.index("Dokumenty")
+                max_radku = max_pocet_radku.get("Dokumenty", 10)
+                for radek in range(max_radku):
+                    if tabulka[radek][col_index] is None:
+                        tabulka[radek][col_index] = film
+                        film_to_col.setdefault(film, []).append(col_index)
+                        vlozeno = True
+                        break
+                if not vlozeno:
+                    rebuffer.append((priorita, film, kat_filmu))
+            else:
+                rebuffer.append((priorita, film, kat_filmu))
+        
+        else:
+            # Only remove "Dokumenty" if film is already in table
+            if "Dokumenty" in kat_filmu and film in film_to_col:
+                kat_filmu = [kat for kat in kat_filmu if kat != "Dokumenty"]
+                
+            np.random.shuffle(kat_filmu)
+            for kat in kat_filmu:
+                col_index = kategorie.index(kat)
+                max_radku = max_pocet_radku.get(kat, 10)
+                for radek in range(max_radku):
+                    if tabulka[radek][col_index] is None:
                         tabulka[radek][col_index] = film
                         film_to_col.setdefault(film, []).append(col_index)
                         dalsi_kategorie = [k for k in kat_filmu if k != kat]
                         if dalsi_kategorie:
-                            rebuffer.append((film, dalsi_kategorie))
-                    else:
-                        rebuffer.append((film, kat_filmu))
-                    vlozeno = True
+                            rebuffer.append((priorita, film, dalsi_kategorie))
+                        vlozeno = True
+                        break
+                if vlozeno:
                     break
-            if vlozeno:
-                break
+            
+            if not vlozeno:
+                rebuffer.append((priorita, film, kat_filmu))
 
         del buffer[index]
 
@@ -80,8 +100,9 @@ def dopln_buffer(tabulka, buffer, film_to_col, kategorie, max_pocet_radku, rebuf
 
 def dopln_rebuffer(tabulka, rebuffer, film_to_col, kategorie, max_pocet_radku):
     np.random.shuffle(rebuffer)
+    rebuffer.sort(key=lambda x: x[0], reverse = True)
     while rebuffer and any(v > 0 for v in get_volna_mista(tabulka, kategorie, max_pocet_radku).values()):
-        film, kategorie_filmu = rebuffer.pop()
+        priorita, film, kategorie_filmu = rebuffer.pop()
         np.random.shuffle(kategorie_filmu)
 
         for kat in kategorie_filmu:
@@ -96,33 +117,3 @@ def dopln_rebuffer(tabulka, rebuffer, film_to_col, kategorie, max_pocet_radku):
                     tabulka[radek][col_index] = film
                     film_to_col.setdefault(film, []).append(col_index)
                     break
-
-
-# Hlavní funkce
-def get_carousel_data():
-    df = nacti_filmy()
-    kategorie = ziskej_kategorie(df)
-    tabulka = [[None for _ in range(len(kategorie))] for _ in range(10)]
-    buffer = []
-    rebuffer = []
-    film_to_col = {}
-
-    for _, row in df.iterrows():
-        film = row.iloc[1]
-        if pd.isna(film) or str(film).strip() == "":
-            break
-
-        kat_filmu = kategorie_filmu(row, kategorie)
-        if not kat_filmu:
-            continue
-
-        if not vloz_prioritni_film(tabulka, film, kat_filmu, kategorie, film_to_col):
-            buffer.append((film, kat_filmu))
-
-    # Druhé kolo
-    rebuffer = dopln_buffer(tabulka, buffer, film_to_col, kategorie, max_pocet_radku, rebuffer)
-
-    # Třetí kolo
-    dopln_rebuffer(tabulka, rebuffer, film_to_col, kategorie, max_pocet_radku)
-
-    return tabulka
