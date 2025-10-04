@@ -1,3 +1,4 @@
 -copilot
 -kód uhladit
 odinstalovat dependencies z global
+úprava git hubu
