@@ -9,7 +9,7 @@ prioritni_kategorie = [
 
 max_pocet_radku = {"Plné velikosti": 3, "Náš výběr": 5, "Náš výběr z internetu": 10}
 
-# Pomocné funkce
+# Aux functions
 def get_volna_mista(tabulka, kategorie, max_pocet_radku):
     volna_mista = {}
     for i, kat in enumerate(kategorie):

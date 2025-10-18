@@ -1,7 +1,7 @@
 import pandas as pd
 import aux_functions as af
 
-# Hlavní funkce
+# First main function - getting unique films to table, prioritized films first; with second function getting non-prioritized films
 def get_carousel_data_unique():
     df = af.nacti_filmy()
     df = df[df.iloc[:, 0].notna()]
@@ -26,13 +26,13 @@ def get_carousel_data_unique():
         if not af.vloz_prioritni_film(tabulka, film, kat_filmu, kategorie, film_to_col, priorita):
             buffer.append((priorita,film, kat_filmu))
 
-    # Druhé kolo
+    # Non-prioritized films second
     rebuffer = af.dopln_buffer(tabulka, buffer, film_to_col, kategorie, af.max_pocet_radku, rebuffer)
 
     return tabulka, rebuffer, film_to_col, kategorie, af.max_pocet_radku
 
+# Second main function - getting already used films to fill the whole table
 def get_carousel_data_additional(tabulka, rebuffer, film_to_col, kategorie, max_pocet_radku):
-        # Třetí kolo
     af.dopln_rebuffer(tabulka, rebuffer, film_to_col, kategorie, max_pocet_radku)
     
     return tabulka

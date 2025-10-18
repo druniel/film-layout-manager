@@ -1,4 +1,3 @@
--copilot
 -kód uhladit
-odinstalovat dependencies z global
-úprava git hubu
+-úprava git hubu
+-přepsat do pyqt6
