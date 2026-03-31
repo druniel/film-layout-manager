@@ -1,4 +1,7 @@
 @echo off
 cd /d "%~dp0"
-python app.py
+if exist .venv\Scripts\activate.bat (
+    call .venv\Scripts\activate.bat
+)
+python main.py
 pause
