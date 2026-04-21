@@ -19,10 +19,6 @@ Film Layout Manager is a Flask-based web application that helps organize films i
 
 - Python 3.x
 - Required Python packages (install via `pip install -r requirements.txt`):
-  - Flask
-  - pandas
-  - numpy
-  - openpyxl
 
 ## Installation
 
@@ -54,7 +50,7 @@ The web interface provides three main actions:
 
 ## Project Structure
 
-- `app.py` - Main Flask application
+- `main.py` - Main Flask application
 - `main_functions.py` - Core film distribution logic
 - `aux_functions.py` - Helper functions for film management
 - `data_manager.py` - Data management class
