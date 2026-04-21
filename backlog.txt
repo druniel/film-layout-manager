@@ -1,3 +1,2 @@
 -přepsat do pyqt6 nebo jiné gui knihovny
--zjistit jak funguje main() a if __name__ == __main__ a zaimplementovat
 -napsat to pomocí tříd?
