@@ -59,16 +59,16 @@
     </table>
     <br>
     <button id="fetchButton" onclick="fetchData()">Doplň unikátní filmy</button>
-    <button id="doplnButton" onclick="doplnData()">Doplň zbytek filmů</button>
+    <button id="addButton" onclick="addData()">Doplň zbytek filmů</button>
     <button id="resetButton" onclick="resetData()">Resetovat data</button>
 
     <script>
     async function fetchData() {
         try {
-            const response = await fetch('/spustit');
+            const response = await fetch('/launch');
             if (!response.ok) {
                 const errorData = await response.json();
-                alert(`Error: ${errorData.error || 'Something went wrong'}`);
+                alert(`Chyba serveru: ${errorData.error}`);
                 return;
             }
             const data = await response.json();
@@ -77,14 +77,14 @@
             const tbody = table.querySelector('tbody');
             tbody.innerHTML = '';
 
-            data.forEach((radek, index) => {
+            data.table.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 
                 const tdTitle = document.createElement('td');
                 tdTitle.textContent = `Film ${index + 1}`;
                 tr.appendChild(tdTitle);
 
-                radek.forEach(film => {
+                row.forEach(film => {
                     const td = document.createElement('td');
                     td.textContent = film || '';
                     tr.appendChild(td);
@@ -92,19 +92,22 @@
 
                 tbody.appendChild(tr);
             });
+
+            alert(data.message);
+
         } catch (error) {
-            alert(`Failed to fetch data: ${error.message}`);
+            alert(`Nepodařilo se připojit k serveru: ${error.message}`);
         }
     }
 </script>
 
 <script>
-    async function doplnData() {
+    async function addData() {
         try {
-            const response = await fetch('/spustit_doplneni');
+            const response = await fetch('/launch_additional');
             if (!response.ok) {
                 const errorData = await response.json();
-                alert(`Error: ${errorData.error || 'Something went wrong'}`);
+                alert(`Chyba: ${errorData.error}`);
                 return;
             }
             const data = await response.json();
@@ -113,14 +116,14 @@
             const tbody = table.querySelector('tbody');
             tbody.innerHTML = '';
 
-            data.forEach((radek, index) => {
+            data.table.forEach((row, index) => {
                 const tr = document.createElement('tr');
                 
                 const tdTitle = document.createElement('td');
                 tdTitle.textContent = `Film ${index + 1}`;
                 tr.appendChild(tdTitle);
 
-                radek.forEach(film => {
+                row.forEach(film => {
                     const td = document.createElement('td');
                     td.textContent = film || '';
                     tr.appendChild(td);
@@ -128,8 +131,11 @@
 
                 tbody.appendChild(tr);
             });
+
+            alert(data.message);
+
         } catch (error) {
-            alert(`Failed to fetch data: ${error.message}`);
+            alert(`Selhalo spojení se serverem: ${error.message}`);
         }
     }
 </script>

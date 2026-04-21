@@ -1,38 +1,39 @@
 from main_functions import get_carousel_data_unique, get_carousel_data_additional
 
-class DataManager:
+class DataManager: #třída spravující data
     def __init__(self):
-        self.tabulka = None
+        self.result_table = None
         self.rebuffer = None
         self.film_to_col = None
-        self.kategorie = None
-        self.max_pocet_radku = None
+        self.categories = None
+        self.max_rows_per_category = None
         
     def reset(self):
-        self.tabulka = None
+        self.result_table = None
         self.rebuffer = None
         self.film_to_col = None
-        self.kategorie = None
-        self.max_pocet_radku = None
+        self.categories = None
+        self.max_rows_per_category = None
 
-    def inicializuj(self):
+    def initialize(self): 
         (
-            self.tabulka,
+            self.result_table,
             self.rebuffer,
             self.film_to_col,
-            self.kategorie,
-            self.max_pocet_radku
+            self.categories,
+            self.max_rows_per_category,
+            message
         ) = get_carousel_data_unique()
-        return self.tabulka
+        return self.result_table, message
 
-    def dopln(self):
-        if self.tabulka is None or self.rebuffer is None:
+    def fill_free_spaces(self):
+        if self.result_table is None or self.rebuffer is None:
             raise ValueError("Tabulka ještě nebyla vytvořena.")
-        self.tabulka = get_carousel_data_additional(
-            self.tabulka,
+        self.result_table, message = get_carousel_data_additional(
+            self.result_table,
             self.rebuffer,
             self.film_to_col,
-            self.kategorie,
-            self.max_pocet_radku
+            self.categories,
+            self.max_rows_per_category
         )
-        return self.tabulka
+        return self.result_table, message
