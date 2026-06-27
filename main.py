@@ -7,9 +7,10 @@ data_manager = DataManager() #vytvoří datovou strukturu
 
 @app.route('/') #načte index.html
 def index():
+    data_manager.reset()
     return render_template('index.html')
 
-@app.route('/launch') #spustí proces unikátních filmů a načte tabulku s unikátními filmy, pokud je nějaký probém, tak vyhodí nějakou chybu
+@app.route('/launch') #spustí proces unikátních filmů a načte tabulku s unikátními filmy, pokud je nějaký problém, tak vyhodí nějakou chybu
 def get_data():
     try:
         result_table, message = data_manager.initialize()
@@ -19,7 +20,7 @@ def get_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/launch_additional') #spustí proces opakovaných filmů a načte tabulku i s nimi, pokud je nějaký problém, vyhodí buď takovou nebo makovou chybu, ale jaké jsou to chyby a proč dvě?
+@app.route('/launch_additional') #spustí proces opakovaných filmů a načte tabulku i s nimi, pokud je nějaký problém, vyhodí buď takovou nebo makovou chybu
 def get_data_additional():
     try:
         result_table, message = data_manager.fill_free_spaces()

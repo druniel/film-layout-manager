@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import networkx as nx
+import random
 
 priority_categories = ["Náš výběr z internetu", "Originální produkce", "Seriály"]
 
@@ -36,9 +37,9 @@ def build_flow_graph(df, categories): #Sestaví NetworkX graf a rovnou naplní r
         cat_node = f"C_{cat}"
         G.add_node(cat_node)
         capacity = max_rows_per_category.get(cat, 10) #pokud kategorie není v dictu definovaná, get jí automaticky přiřadí kapacitu 10
-        G.add_edge(cat_node, "T", capacity=capacity, weight=0) #propojení uzlu dané kategorie > s uzlem spotřebitele; kapacita = kolik max filmů může z kategorie ke spotřebiteli odtéct; váha znamená, kolik stojí poslat jednu jednotu, 0 = neutrální
+        G.add_edge(cat_node, "T", capacity=capacity, weight=0) #propojení uzlu dané kategorie > s uzlem spotřebitele; kapacita = kolik max filmů může z kategorie ke spotřebiteli odtéct; váha znamená, kolik stojí poslat jednu jednotku, 0 = neutrální
 
-    for index, row in df.iterrows(): #smyčka stasvící graf
+    for index, row in df.iterrows(): #smyčka stavící graf
         film = row.iloc[1] #vytáhne název filmu ze sloupce č. 1 
         priority = row.iloc[0] #vytáhne prioritu ze sloupce č. 0
         movie_node = f"M_{index}" #string M_ a unikátní index filmu podle čísla řádku
@@ -77,7 +78,7 @@ def extract_flow_results(df, flow_dict, categories, result_table):
     used_films = set() #sleduje, které filmy se použily
     film_to_col = {} #dict sledující, do kterých kategorií už byl film přiřazen
     
-    for index, row in df.iterrows(): #smyčka čte výsledky z po průtoku grafem a staví výslednou tabulku
+    for index, row in df.iterrows(): #smyčka čte výsledky po průtoku grafem a staví výslednou tabulku
         movie_node = f"M_{index}"
         film = row.iloc[1]
         
@@ -105,3 +106,28 @@ def calculate_free_space(result_table, categories, max_rows): #najde volná mís
     total_free_space = sum(free_space.values()) #celkový počet prázdných míst v tabulce
     
     return free_space, total_free_space
+
+def add_films_from_rebuffer(rebuffer, free_space, categories, max_rows, result_table, film_to_col):
+    filled_films = 0
+    while rebuffer and sum(free_space.values()) > 0: #běží dokud je něco v rebufferu a zároveň jsou v tabulce volná místa
+        priority, film, film_cat = rebuffer.popleft()
+        random.shuffle(film_cat)
+        
+        for cat in film_cat:
+            if free_space.get(cat, 0) > 0: #pokud má kategorie víc než 0 volných míst, jinak defaultně 0
+                col_index = categories.index(cat) #vytvoří proměnnou s číslem sloupce podle toho kolikátá je ta kategorie
+                capacity = max_rows.get(cat, 10)
+                original_columns = film_to_col.get(film, []) #kategorie, do kterých už film byl zařazen
+                
+                if any(abs(col_index - c) < 3 for c in original_columns): #kontrola vzdálenosti sloupce kam chce film umístit od ostatních sloupců, kde už je
+                    continue #pokud je rozestup menší než 3 sloupce tak zkusí jinou kategorii
+                
+                for row in range(capacity): #hledá volný řádek v dané kategorii
+                    if result_table[row][col_index] == "":
+                        result_table[row][col_index] = film
+                        film_to_col.setdefault(film, []).append(col_index) #pro účely sledování připíše k tomu filmu tuto kategorii
+                        free_space[cat] -= 1 #snižuje počet volných míst u dané kategorie, aby while loop nejel donekonečna
+                        filled_films += 1
+                        break
+                break
+    return filled_films
