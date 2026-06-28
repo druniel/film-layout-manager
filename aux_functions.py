@@ -109,6 +109,7 @@ def calculate_free_space(result_table, categories, max_rows): #najde volná mís
 
 def add_films_from_rebuffer(rebuffer, free_space, categories, max_rows, result_table, film_to_col):
     filled_films = 0
+    
     while rebuffer and sum(free_space.values()) > 0: #běží dokud je něco v rebufferu a zároveň jsou v tabulce volná místa
         priority, film, film_cat = rebuffer.popleft()
         random.shuffle(film_cat)
