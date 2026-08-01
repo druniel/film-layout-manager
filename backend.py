@@ -5,10 +5,9 @@ from collections import deque
 
 class FilmProcessor:
     def __init__(self):
-        self.df = af.load_films()
-        self.categories = af.get_categories(self.df)
-        self.max_rows = af.max_rows_per_category
-        self.reset()
+        self.df = None
+        self.categories = []
+        self.max_rows = None
         
     def reset(self):
         self.result_table = [["" for _ in range(len(self.categories))] for _ in range(10)]
