@@ -8,6 +8,18 @@ class FilmProcessor:
         self.df = None
         self.categories = []
         self.max_rows = None
+        self.result_table = []
+        self.G = None
+        self.rebuffer = []
+        self.film_to_col = {}
+        self.cat_counts = {}
+        self.used_films = set()
+        
+    def load_data(self, file_path):
+        self.df = af.load_films(file_path)
+        self.categories = af.get_categories(self.df)
+        self.max_rows = af.max_rows_per_category
+        self.reset()
         
     def reset(self):
         self.result_table = [["" for _ in range(len(self.categories))] for _ in range(10)]
@@ -17,6 +29,8 @@ class FilmProcessor:
         self.used_films = set()
 
     def get_carousel_data_unique(self): #funkce s logikou plnění tabulky unikátními filmy
+        if self.G is None:
+            raise RuntimeError("Graf nebyl vytvořen. Nejdříve načtěte data z Excelu.")
         try: #spustí proces toku dat grafem tak, aby to bylo podle pravidel a stálo to co nejmíň
             flow_dict = nx.min_cost_flow(self.G)
         except Exception as e: #když se to nepovede, tak nastala chyba v networkx a konzole vypíše error
