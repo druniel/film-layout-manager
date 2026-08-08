@@ -1,7 +1,7 @@
-from PySide6.QtWidgets import QMainWindow, QMessageBox,QFileDialog, QHeaderView, QApplication
-from PySide6.QtCore import QAbstractTableModel, Qt, QSize
+from PySide6.QtWidgets import QMainWindow, QMessageBox,QFileDialog, QHeaderView, QApplication, QInputDialog
+from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel
+from PySide6.QtGui import QIcon, QShortcut, QKeySequence
 import qtawesome as qta
-from PySide6.QtGui import QIcon
 from ui_main import Ui_MainWindow
 
 class FilmTableModel(QAbstractTableModel):
@@ -79,6 +79,8 @@ class MainWindow(QMainWindow):
         self.ui.btn_rebuffer.setIcon(qta.icon('fa5s.puzzle-piece', color='white', color_disabled='gray'))
         self.ui.btn_reset.setIcon(qta.icon('fa5s.sync-alt', color='white', color_disabled='gray'))
         self.ui.btn_exit.setIcon(qta.icon('fa5s.times', color='white'))
+        self.shortcut_search = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.shortcut_search.activated.connect(self.search_film)
         for btn in [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]:
             btn.setIconSize(QSize(30, 30))
         self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
@@ -169,3 +171,32 @@ class MainWindow(QMainWindow):
         if self.table_model:
             self.table_model.update_data(self.backend.result_table)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
+            
+    def search_film(self):
+        if not self.table_model or not self.backend.used_films:
+            QMessageBox.information(self, "Hledání", f"Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
+            return
+            
+        text, ok = QInputDialog.getText(self, "Vyhledávání", "Zadejte název filmu:")
+        
+        if ok and text:
+            search_query = text.lower().strip()
+            found = False
+            self.ui.tableView.clearSelection()
+            
+            for r in range(self.table_model.rowCount()):
+                for c in range(self.table_model.columnCount()):
+                    index = self.table_model.index(r, c)
+                    cell_data = self.table_model.data(index)
+                    
+                    if cell_data and search_query in str(cell_data).lower():
+                        self.ui.tableView.selectionModel().select(index, QItemSelectionModel.SelectionFlag.Select)
+                        
+                        if not found:
+                            self.ui.tableView.scrollTo(index)
+                            found = True
+            
+            if found:
+                self.statusBar().showMessage(f"Hledání pro '{text}' dokončeno.", 5000)
+            else:
+                QMessageBox.information(self, "Hledání", f"Film '{text}' nebyl nalezen.")

@@ -9,7 +9,7 @@ def main():
     app.setStyleSheet(qdarktheme.load_stylesheet("dark"))
     backend = FilmProcessor()
     window = MainWindow(backend)
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())
 
 if __name__ == "__main__":

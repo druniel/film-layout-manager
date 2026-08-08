@@ -3,9 +3,9 @@ import numpy as np
 import networkx as nx
 import random
 
-priority_categories = ["Náš výběr z internetu", "Originální produkce", "Seriály"]
+priority_categories = ["Originální produkce", "Seriály", "Plná velikost 1", "Plná velikost 2", "Plná velikost 3", "Náš výběr"]
 
-max_rows_per_category = {"Plné velikosti": 3, "Náš výběr": 5, "Náš výběr z internetu": 10}
+max_rows_per_category = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná velikost 3": 1, "Náš výběr": 5}
 
 # Aux functions
 def get_movie_categories(row, categories):
@@ -61,7 +61,9 @@ def build_flow_graph(df, categories): #Sestaví NetworkX graf a rovnou naplní r
             cat_node = f"C_{cat}"
             
             match cat: #čím menší váha, tím spíš do ní algoritmus film přiřadí
-                case "Plné velikosti": edge_weight = -90
+                case "Plná velikost 1": edge_weight = -100
+                case "Plná velikost 2": edge_weight = -90
+                case "Plná velikost 3": edge_weight = -85
                 case "Náš výběr": edge_weight = -80
                 case "Obsah zdarma": edge_weight = -70
                 case "Pro děti": edge_weight = -60
