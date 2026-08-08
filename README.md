@@ -1,58 +1,54 @@
-# Film Layout Manager
-
-An application for managing and organizing films into different categories with a dynamic table layout system.
+# Film Layout Manager (Filmana generátor rozvržení filmů)
 
 ## Description
 
-Film Layout Manager is a Flask-based web application that helps organize films into various categories using a priority-based system. It features a dynamic table that can be filled with unique films and additional entries based on specific rules and categories.
+Film Layout Manager is a Python-based desktop application that helps organize films into various categories using a priority-based system. It features a dynamic data table, a modern dark user interface, and graph-based data distribution logic.
 
 ## Features
 
-- Dynamic film categorization
-- Priority-based film placement
-- Interactive web interface
-- Category-specific row limits
-- Automatic film distribution across categories
-- Reset functionality
+* **Dynamic desktop interface:** Built with `PySide6` and styled with `qdarktheme` for a modern, native look.
+* **Collapsible side menu:** Interactive navigation featuring vector icons powered by `qtawesome`.
+* **Priority-based film placement:** Uses `networkx` directed flow graphs to optimally distribute films into categories based on priorities and weight rules.
+* **Excel integration:** Directly loads and parses film databases from `.xlsx` files using `pandas`.
+* **Smart auto-fill:** Capabilities to generate a layout of unique films and subsequently refill any remaining empty spots from a secondary rebuffer.
 
 ## Prerequisites
 
-- Python 3.x
-- Required Python packages (install via `pip install -r requirements.txt`):
+* Python 3.x
+* Required Python packages (install via `pip install -r requirements.txt`). Key dependencies include `PySide6`, `pandas`, `networkx`, `openpyxl`, `pyqtdarktheme`, and `QtAwesome`.
 
 ## Installation
 
-1. Clone this repository
-2. Install required dependencies:
+1. Clone this repository.
+2. Install the required dependencies:
 ```sh
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-1. Place your film database Excel file (`databaze_filmu.xlsx`) in the root directory
-2. Run the application using:
+1. Run the application using the main entry script:
 ```sh
-python app.py
+python main.py
 ```
-Or use the provided batch file:
-```sh
-run.bat
-```
-3. Open your web browser and navigate to `http://localhost:5000`
+2. Once the application opens, click on **Načíst databázi** to load your `.xlsx` film database.
+3. Use the action buttons in the side menu to generate and interact with the layout.
 
 ## Interface
 
-The web interface provides three main actions:
-- **Doplň unikátní filmy** - Fills the table with unique films based on priorities
-- **Doplň zbytek filmů** - Completes the table with additional film entries
-- **Resetovat data** - Resets the table to its initial state
+The desktop GUI provides the following main actions:
+
+* **Načíst databázi** - Opens a file dialog to load the Excel database.
+* **Doplnit unikátní filmy** - Triggers the graph flow algorithm to fill the table with unique films.
+* **Doplnit prázdná místa** - Fills remaining empty slots in the table using items from the rebuffer.
+* **Reset** - Clears the current table layout and restores it to its initial state.
+* **Zavřít aplikaci** - Safely exits the program.
 
 ## Project Structure
 
-- `main.py` - Main Flask application
-- `main_functions.py` - Core film distribution logic
-- `aux_functions.py` - Helper functions for film management
-- `data_manager.py` - Data management class
-- `templates/index.html` - Web interface template
-- `run.bat` - Windows batch file for easy startup
+* `main.py` - The main application entry point that initializes the backend processor and the GUI window.
+* `gui.py` - Contains the `MainWindow` class, UI logic, custom QSS styling, and the `FilmTableModel` for displaying data.
+* `ui_main.py` - The raw, auto-generated UI layout file compiled from Qt Designer.
+* `backend.py` - Contains the `FilmProcessor` class acting as the bridge between the GUI and data operations.
+* `aux_functions.py` - Core algorithmic logic, including Pandas data cleaning, graph building, and free space calculations.
+* `requirements.txt` - List of exact package versions needed to run the application.

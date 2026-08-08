@@ -17,12 +17,16 @@ class FilmProcessor:
         
     def load_data(self, file_path):
         self.df = af.load_films(file_path)
+        if not {'Film', 'Priorita'}.issubset(self.df.columns):
+            raise ValueError(f"Vyberte prosím správnou databázi.")
         self.categories = af.get_categories(self.df)
         self.max_rows = af.max_rows_per_category
         self.reset()
         
     def reset(self):
         self.result_table = [["" for _ in range(len(self.categories))] for _ in range(10)]
+        if self.df is not None:
+            self.df = self.df.sample(frac=1).reset_index(drop=True)
         self.G, self.rebuffer = af.build_flow_graph(self.df, self.categories)
         self.film_to_col = {}
         self.cat_counts = {}
