@@ -16,12 +16,11 @@ class FilmProcessor:
         self.used_films = set()
         
     def load_data(self, file_path):
-        self.df = af.load_films(file_path)
-        if not {'Film', 'Priorita'}.issubset(self.df.columns):
-            raise ValueError(f"Vyberte prosím správnou databázi.")
+        self.df, ignored_films = af.load_films(file_path)
         self.categories = af.get_categories(self.df)
         self.max_rows = af.max_rows_per_category
         self.reset()
+        return ignored_films
         
     def reset(self):
         self.result_table = [["" for _ in range(len(self.categories))] for _ in range(10)]

@@ -1,5 +1,4 @@
 -předělat readme
 -chatgpt kritika - zapracovat
 -exe zabalení
--nepoužívané balíčky pryč např numpy
--přepsat kod podle nové struktury tabulky
+-asynchronnost/vícejádrovost

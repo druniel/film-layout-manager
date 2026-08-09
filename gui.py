@@ -1,8 +1,17 @@
 from PySide6.QtWidgets import QMainWindow, QMessageBox,QFileDialog, QHeaderView, QApplication, QInputDialog
 from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel
-from PySide6.QtGui import QIcon, QShortcut, QKeySequence
+from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
 from ui_main import Ui_MainWindow
+from pathlib import Path
+import sys
+
+def get_resource_path(relative_path: str) -> str:
+    if hasattr(sys, '_MEIPASS'):
+        base_path = Path(getattr(sys, '_MEIPASS'))
+    else:
+        base_path = Path(__file__).resolve().parent
+    return (base_path / relative_path).as_posix()
 
 class FilmTableModel(QAbstractTableModel):
     def __init__(self, data, headers):
@@ -17,6 +26,8 @@ class FilmTableModel(QAbstractTableModel):
         return len(self._headers)
     
     def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
+        if not index.isValid():
+            return None
         if role == Qt.ItemDataRole.DisplayRole:
             return self._data[index.row()][index.column()]
         if role == Qt.ItemDataRole.TextAlignmentRole:
@@ -32,8 +43,9 @@ class FilmTableModel(QAbstractTableModel):
         return None
     
     def update_data(self, new_data):
+        self.beginResetModel()
         self._data = new_data
-        self.layoutChanged.emit()
+        self.endResetModel()
         
 
 class MainWindow(QMainWindow):
@@ -55,7 +67,7 @@ class MainWindow(QMainWindow):
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setWindowTitle("Filmana generátor rozvržení filmů")
-        self.setWindowIcon(QIcon("img/filmana-layout-dark-tile.ico"))
+        self.is_menu_expanded = False
         self.ui.btn_load.hide()
         self.ui.btn_create.hide()
         self.ui.btn_rebuffer.hide()
@@ -86,11 +98,11 @@ class MainWindow(QMainWindow):
         self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
         
     def toggle_menu(self):
-        width = self.ui.frame.width()
         buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]
         
-        if width == 50:
+        if not self.is_menu_expanded:
             new_width = 200
+            self.is_menu_expanded = True
             self.ui.frame.setStyleSheet(self.STYLE_EXPANDED)
             for btn in buttons:
                 btn.setIconSize(QSize(20, 20))
@@ -103,6 +115,7 @@ class MainWindow(QMainWindow):
             self.ui.btn_reset.show()
         else:
             new_width = 50
+            self.is_menu_expanded = False
             self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
             for btn in buttons:
                 btn.setIconSize(QSize(30, 30))
@@ -126,7 +139,7 @@ class MainWindow(QMainWindow):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
-                self.backend.load_data(file_name)
+                ignored_films = self.backend.load_data(file_name)
                 self.ui.btn_create.setEnabled(True)
                 self.table_model = FilmTableModel(self.backend.result_table, self.backend.categories)
                 self.ui.tableView.setModel(self.table_model)
@@ -134,6 +147,8 @@ class MainWindow(QMainWindow):
                 self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
             finally:
                 QApplication.restoreOverrideCursor()
+            if ignored_films:
+                QMessageBox.information(self, "Ignorované filmy", "Některé filmy byly ignorovány, protože neměly platný ID:\n" + "\n".join(ignored_films))
         except Exception as e:
             QMessageBox.critical(self, "Chyba", str(e))
             
@@ -176,7 +191,7 @@ class MainWindow(QMainWindow):
             
     def search_film(self):
         if not self.table_model or not self.backend.used_films:
-            QMessageBox.information(self, "Hledání", f"Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
+            QMessageBox.information(self, "Hledání", "Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
             return
             
         text, ok = QInputDialog.getText(self, "Vyhledávání", "Zadejte název filmu:")
