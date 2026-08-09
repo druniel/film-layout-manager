@@ -16,8 +16,9 @@ class FilmProcessor:
         self.used_films = set()
         
     def load_data(self, file_path):
-        self.df, ignored_films = af.load_films(file_path)
-        self.categories = af.get_categories(self.df)
+        new_df, ignored_films = af.load_films(file_path)
+        self.df = new_df
+        self.categories = af.get_categories(new_df)
         self.max_rows = af.max_rows_per_category
         self.reset()
         return ignored_films

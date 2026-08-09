@@ -4,7 +4,7 @@ import random
 
 priority_categories = ["Originální produkce", "Seriály", "Plná velikost 1", "Plná velikost 2", "Plná velikost 3", "Náš výběr"]
 
-max_rows_per_category = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná velikost 3": 1, "Náš výběr": 5}
+max_rows_per_category = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná velikost 3": 1, "Náš výběr": 5, "Obsah zdarma": 10}
 
 # Aux functions
 def get_movie_categories(row, categories):
@@ -20,7 +20,7 @@ def load_films(file_name="databaze_filmu.xlsx"): #načte excel soubor se vstupn�
     if not {'ID', 'Film', 'Priorita'}.issubset(df.columns):
         raise ValueError("Vyberte prosím správnou databázi.")
     
-    df["ID"] = pd.to_numeric(df["ID"], errors='coerce') #převádí první sloupec s prioritami na čísla a nečístelné hodnoty na NaN
+    df["ID"] = pd.to_numeric(df["ID"], errors='coerce') #převádí první sloupec s prioritami na čísla a nečíselné hodnoty na NaN
     df["Priorita"] = pd.to_numeric(df["Priorita"], errors='coerce')
     ignored_films = [str(film) for film in df[df["ID"].isna()]["Film"].tolist() if str(film).lower() not in ('nan', '')]
     df = df[df["ID"].notna()] #vyhodí pryč všechny NaN řádky
@@ -49,9 +49,10 @@ def build_flow_graph(df, categories): #Sestaví NetworkX graf a rovnou naplní r
         G.add_edge(cat_node, "T", capacity=capacity, weight=0) #propojení uzlu dané kategorie > s uzlem spotřebitele; kapacita = kolik max filmů může z kategorie ke spotřebiteli odtéct; váha znamená, kolik stojí poslat jednu jednotku, 0 = neutrální
 
     for index, row in df.iterrows(): #smyčka stavící graf
+        film_id = row["ID"]
         film = row["Film"] #vytáhne název filmu ze sloupce č. 1 
         priority = row["Priorita"] #vytáhne prioritu ze sloupce č. 3
-        movie_node = f"M_{index}" #string M_ a unikátní index filmu podle čísla řádku
+        movie_node = f"M_{film_id}" #string M_ a unikátní id filmu
         G.add_node(movie_node)
         
         match priority: #čím menší váha, tím raději algoritmus film použije
@@ -64,7 +65,7 @@ def build_flow_graph(df, categories): #Sestaví NetworkX graf a rovnou naplní r
         film_categories = get_movie_categories(row, categories) #vrátí list s kategoriemi, do kterých daný film patří
         
         if film_categories: #pokud existují u filmu kategorie tak ho přidá do rebufferu i s dalšími údaji
-            rebuffer.append((priority, film, film_categories))
+            rebuffer.append((priority, film_id, film, film_categories))
         
         for cat in film_categories:
             cat_node = f"C_{cat}"
@@ -89,8 +90,9 @@ def extract_flow_results(df, flow_dict, categories, result_table):
     category_to_column = {cat: i for i, cat in enumerate(categories)}
     
     for index, row in df.iterrows(): #smyčka čte výsledky po průtoku grafem a staví výslednou tabulku
-        movie_node = f"M_{index}"
-        film = row["Film"]
+        film_id = row["ID"]
+        film = row["Film"]  
+        movie_node = f"M_{film_id}"
         
         if movie_node in flow_dict: #je film v grafu?
             for cat_node, flow in flow_dict[movie_node].items(): #u daného id filmu je vždy kategorie kam odešel a množství, buď 1 nebo 0
@@ -101,9 +103,9 @@ def extract_flow_results(df, flow_dict, categories, result_table):
                     
                     if row_index < len(result_table):
                         result_table[row_index][col_index] = film 
-                        film_to_col.setdefault(film, []).append(col_index) #pokud film v tomto sledovacím dictu neexistuje, vytvoří nový klíč a k němu list. pak vloží do listu číslo kategorie
+                        film_to_col.setdefault(film_id, []).append(col_index) #pokud film v tomto sledovacím dictu neexistuje, vytvoří nový klíč a k němu list. pak vloží do listu číslo kategorie
                         cat_counts[cat_name] += 1
-                        used_films.add(film)
+                        used_films.add(film_id)
                         
     return result_table, film_to_col, cat_counts, used_films
 
@@ -122,25 +124,27 @@ def calculate_free_space(result_table, categories, max_rows): #najde volná mís
 def add_films_from_rebuffer(rebuffer, free_space, categories, max_rows, result_table, film_to_col):
     category_to_column = {cat: i for i, cat in enumerate(categories)}
     filled_films = 0
+    total_free = sum(free_space.values())
     
-    while rebuffer and sum(free_space.values()) > 0: #běží dokud je něco v rebufferu a zároveň jsou v tabulce volná místa
-        priority, film, film_cat = rebuffer.popleft()
+    while rebuffer and total_free > 0: #běží dokud je něco v rebufferu a zároveň jsou v tabulce volná místa
+        priority, film_id, film, film_cat = rebuffer.popleft()
         random.shuffle(film_cat)
         
         for cat in film_cat:
             if free_space.get(cat, 0) > 0: #pokud má kategorie víc než 0 volných míst, jinak defaultně 0
                 col_index = category_to_column[cat] #vytvoří proměnnou s číslem sloupce podle toho kolikátá je ta kategorie
                 capacity = max_rows.get(cat, 10)
-                original_columns = film_to_col.get(film, []) #kategorie, do kterých už film byl zařazen
+                original_columns = film_to_col.get(film_id, []) #kategorie, do kterých už film byl zařazen
                 
                 if any(abs(col_index - c) < 3 for c in original_columns): #kontrola vzdálenosti sloupce kam chce film umístit od ostatních sloupců, kde už je
                     continue #pokud je rozestup menší než 3 sloupce tak zkusí jinou kategorii
                 
-                for row in range(capacity): #hledá volný řádek v dané kategorii
+                for row in range(min(capacity, len(result_table))): #hledá volný řádek v dané kategorii
                     if result_table[row][col_index] == "":
                         result_table[row][col_index] = film
-                        film_to_col.setdefault(film, []).append(col_index) #pro účely sledování připíše k tomu filmu tuto kategorii
+                        film_to_col.setdefault(film_id, []).append(col_index) #pro účely sledování připíše k tomu filmu tuto kategorii
                         free_space[cat] -= 1 #snižuje počet volných míst u dané kategorie, aby while loop nejel donekonečna
+                        total_free -= 1
                         filled_films += 1
                         break
                 break

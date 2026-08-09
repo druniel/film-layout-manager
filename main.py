@@ -8,7 +8,7 @@ import ctypes
 
 def main():
     if sys.platform == 'win32':
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('film_layout_manager.app.v3')
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('film_layout_manager.app.v4')
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(get_resource_path("img/filmana-layout-dark-tile.ico")))
     app.setStyleSheet(qdarktheme.load_stylesheet("dark"))
