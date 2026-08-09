@@ -8,7 +8,7 @@ max_rows_per_category = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná ve
 
 # Aux functions
 def get_movie_categories(row, categories):
-    bool_values = row.iloc[3:].astype(str).str.lower().tolist() #vezme bool hodnoty u daného filmu a vloží do listu
+    bool_values = row[categories].astype(str).str.lower().tolist() #vezme bool hodnoty u daného filmu a vloží do listu
     return [cat for cat, val in zip(categories, bool_values) if val == "true"] #list s kategoriemi, do kterých daný film patří
 
 def load_films(file_name="databaze_filmu.xlsx"): #načte excel soubor se vstupními daty, vyčístí ho a vrátí jako pandas dataframe a první řádek určí jako hlavičku
@@ -20,18 +20,36 @@ def load_films(file_name="databaze_filmu.xlsx"): #načte excel soubor se vstupn�
     if not {'ID', 'Film', 'Priorita'}.issubset(df.columns):
         raise ValueError("Vyberte prosím správnou databázi.")
     
-    df["ID"] = pd.to_numeric(df["ID"], errors='coerce') #převádí první sloupec s prioritami na čísla a nečíselné hodnoty na NaN
-    df["Priorita"] = pd.to_numeric(df["Priorita"], errors='coerce')
-    ignored_films = [str(film) for film in df[df["ID"].isna()]["Film"].tolist() if str(film).lower() not in ('nan', '')]
-    df = df[df["ID"].notna()] #vyhodí pryč všechny NaN řádky
-    df["ID"] = df["ID"].astype(int) #převede první sloupec s prioritami na integer
-    df["Priorita"] = df["Priorita"].astype(int)
-    df["Film"] = df["Film"].astype(str).str.strip() #sloupec s názvy filmů převede na stringy, očistí mezery
-    df = df[~df["Film"].str.lower().isin(['', 'nan'])] #označí řádky, kde není název filmu, nebo je tam "nan" jako True, znak ~ je vlastně not, otáčí operaci do záporu, aby zůstaly správné řádky
+    df["_excel_row"] = df.index + 2 # Uloží původní čísla řádků z Excelu pro chybové hlášky, hlavička = +1 a pandas začíná na 0 takže další +1
+    df = df.dropna(how='all', subset=['ID', 'Film', 'Priorita']) # vyhodí řádky kde není žádné povinné pole
+    df["ID_num"] = pd.to_numeric(df["ID"], errors='coerce') #převádí první sloupec s prioritami na čísla a nečíselné hodnoty na NaN
+    df["Priorita_num"] = pd.to_numeric(df["Priorita"], errors='coerce')
+    ignored_films = []
+    
+    invalid_ids = df[df["ID_num"].isna()] # Záchyt filmů s neplatným nebo chybějícím ID
+    for _, row in invalid_ids.iterrows():
+        title = row["Film"] if pd.notna(row["Film"]) and str(row["Film"]).strip() != "" else "Neznámý název"
+        ignored_films.append(f"Řádek {row['_excel_row']}: '{title}' - neplatné nebo chybějící ID")
+        
+    invalid_priorities = df[df["Priorita_num"].isna() & df["ID_num"].notna()] # Záchyt filmů s neplatnou nebo chybějící prioritou
+    for _, row in invalid_priorities.iterrows():
+        ignored_films.append(f"Řádek {row['_excel_row']}: '{row['Film']}' - neplatná priorita")
+        
+    df["Film"] = df["Film"].astype(str).str.strip()
+    invalid_titles = df[df["Film"].str.lower().isin(['', 'nan']) & df["ID_num"].notna() & df["Priorita_num"].notna()] # Záchyt filmů s chybějícím názvem
+    for _, row in invalid_titles.iterrows():
+        ignored_films.append(f"Řádek {row['_excel_row']}: ID {int(row['ID_num'])} - chybí název filmu")
+        
+    df = df[df["ID_num"].notna() & df["Priorita_num"].notna() & ~df["Film"].str.lower().isin(['', 'nan'])].copy() # Filtrace pouze platných řádků (zůstane to, co nemá nikde NaN a má název)
+    
+    df["ID"] = df["ID_num"].astype(int) # Zápis čistých dat a úklid pomocných sloupců
+    df["Priorita"] = df["Priorita_num"].astype(int)
+    df = df.drop(columns=["ID_num", "Priorita_num", "_excel_row"])
+    
     return df, ignored_films
 
 def get_categories(df): #vrátí hlavičku od 2. sloupce, tedy kategorie
-    return df.columns[3:].tolist()
+    return [col for col in df.columns if col not in {"ID", "Film", "Priorita"}]
 
 def build_flow_graph(df, categories): #Sestaví NetworkX graf a rovnou naplní rebuffer
     rebuffer = [] #list pro filmy, které se můžou použít znovu

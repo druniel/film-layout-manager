@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
             finally:
                 QApplication.restoreOverrideCursor()
             if ignored_films:
-                QMessageBox.information(self, "Ignorované filmy", "Některé filmy byly ignorovány, protože neměly platný ID:\n" + "\n".join(ignored_films))
+                QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
         except Exception as e:
             QMessageBox.critical(self, "Chyba", str(e))
             
