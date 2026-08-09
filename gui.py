@@ -128,8 +128,6 @@ class MainWindow(QMainWindow):
             try:
                 self.backend.load_data(file_name)
                 self.ui.btn_create.setEnabled(True)
-                self.ui.btn_rebuffer.setEnabled(True)
-                self.ui.btn_reset.setEnabled(True)
                 self.table_model = FilmTableModel(self.backend.result_table, self.backend.categories)
                 self.ui.tableView.setModel(self.table_model)
                 self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -148,6 +146,8 @@ class MainWindow(QMainWindow):
                 if self.table_model:
                     self.table_model.update_data(new_data)
                     self.statusBar().showMessage(message, 5000)
+                    self.ui.btn_rebuffer.setEnabled(True)
+                    self.ui.btn_reset.setEnabled(True)
             finally:
                 QApplication.restoreOverrideCursor()
         except Exception as e:
@@ -171,6 +171,8 @@ class MainWindow(QMainWindow):
         if self.table_model:
             self.table_model.update_data(self.backend.result_table)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
+            self.ui.btn_rebuffer.setEnabled(False)
+            self.ui.btn_reset.setEnabled(False)
             
     def search_film(self):
         if not self.table_model or not self.backend.used_films:
