@@ -3,8 +3,8 @@ import networkx as nx
 import random
 
 priority_categories = ["Originální produkce", "Seriály", "Plná velikost 1", "Plná velikost 2", "Plná velikost 3", "Náš výběr"]
-
 max_rows_per_category = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná velikost 3": 1, "Náš výběr": 5, "Obsah zdarma": 10}
+mix_category_spacing = 3
 
 # Aux functions
 def get_movie_categories(row, categories):
@@ -102,28 +102,36 @@ def build_flow_graph(df, categories): #Sestaví NetworkX graf a rovnou naplní r
     return G, rebuffer
 
 def extract_flow_results(df, flow_dict, categories, result_table):
-    cat_counts = {cat: 0 for cat in categories} #dict sledující, kolik filmů už bylo přiřazeno do každé kategorie
     used_films = set() #sleduje, které filmy se použily
     film_to_col = {} #dict sledující, do kterých kategorií už byl film přiřazen
     category_to_column = {cat: i for i, cat in enumerate(categories)}
+    cat_assignments = {cat: [] for cat in categories}
+    cat_counts = {cat: 0 for cat in categories} #dict sledující, kolik filmů už bylo přiřazeno do každé kategorie
     
     for index, row in df.iterrows(): #smyčka čte výsledky po průtoku grafem a staví výslednou tabulku
         film_id = row["ID"]
         film = row["Film"]  
+        priority = row["Priorita"]
         movie_node = f"M_{film_id}"
         
         if movie_node in flow_dict: #je film v grafu?
             for cat_node, flow in flow_dict[movie_node].items(): #u daného id filmu je vždy kategorie kam odešel a množství, buď 1 nebo 0
                 if flow > 0 and cat_node.startswith("C_"): #protekl film do dané kategorie? a protekl vůbec do některé kategorie, nebo prošel přes bypass?
                     cat_name = cat_node.removeprefix("C_") #odstraní prefix, aby kategorie byla shodná s názvem v tabulce
-                    col_index = category_to_column[cat_name] #zjistí index kategorie v tabulce
-                    row_index = cat_counts[cat_name] #dle počítadla vložených filmů v kategorii zjistí řádek kam vložit nový film
+                    cat_assignments[cat_name].append((priority, film_id, film))
                     
-                    if row_index < len(result_table):
-                        result_table[row_index][col_index] = film 
-                        film_to_col.setdefault(film_id, []).append(col_index) #pokud film v tomto sledovacím dictu neexistuje, vytvoří nový klíč a k němu list. pak vloží do listu číslo kategorie
-                        cat_counts[cat_name] += 1
-                        used_films.add(film_id)
+    for cat_name, assigned_films in cat_assignments.items():
+        assigned_films.sort(key=lambda x: x[0])
+        col_index = category_to_column[cat_name] #zjistí index kategorie v tabulce
+        
+        for priority, film_id, film in assigned_films:
+            row_index = cat_counts[cat_name] #dle počítadla vložených filmů v kategorii zjistí řádek kam vložit nový film
+                    
+            if row_index < len(result_table):
+                result_table[row_index][col_index] = film 
+                film_to_col.setdefault(film_id, []).append(col_index) #pokud film v tomto sledovacím dictu neexistuje, vytvoří nový klíč a k němu list. pak vloží do listu číslo kategorie
+                cat_counts[cat_name] += 1
+                used_films.add(film_id)
                         
     return result_table, film_to_col, cat_counts, used_films
 
@@ -133,8 +141,7 @@ def calculate_free_space(result_table, categories, max_rows): #najde volná mís
     
     for col, cat in enumerate(categories): #hledá prázdná místa v tabulce
         capacity = max_rows.get(cat, 10)
-        limit = min(capacity, max_table_rows)
-        free_space[cat] = sum(1 for row in range(limit) if result_table[row][col] == "") #projde tabulku a pro každé volné místo v dané kategorii připočítá 1
+        free_space[cat] = sum(1 for row in range(min(capacity, max_table_rows)) if result_table[row][col] == "") #projde tabulku a pro každé volné místo v dané kategorii připočítá 1
         
     total_free_space = sum(free_space.values()) #celkový počet prázdných míst v tabulce
     return free_space, total_free_space
@@ -154,7 +161,7 @@ def add_films_from_rebuffer(rebuffer, free_space, categories, max_rows, result_t
                 capacity = max_rows.get(cat, 10)
                 original_columns = film_to_col.get(film_id, []) #kategorie, do kterých už film byl zařazen
                 
-                if any(abs(col_index - c) < 3 for c in original_columns): #kontrola vzdálenosti sloupce kam chce film umístit od ostatních sloupců, kde už je
+                if any(abs(col_index - c) < mix_category_spacing for c in original_columns): #kontrola vzdálenosti sloupce kam chce film umístit od ostatních sloupců, kde už je
                     continue #pokud je rozestup menší než 3 sloupce tak zkusí jinou kategorii
                 
                 for row in range(min(capacity, len(result_table))): #hledá volný řádek v dané kategorii

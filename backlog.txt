@@ -2,3 +2,4 @@
 -chatgpt kritika - zapracovat
 -exe zabalení
 -asynchronnost/vícejádrovost
+-zamknutí pozic
