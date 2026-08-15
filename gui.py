@@ -2,9 +2,13 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox,QFileDialog, QHeaderView,
 from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
-from ui_main import Ui_MainWindow
 from pathlib import Path
 import sys
+import copy
+import data_types as dt
+import loader
+import builder
+from ui_main import Ui_MainWindow
 
 def get_resource_path(relative_path: str) -> str:
     if hasattr(sys, '_MEIPASS'):
@@ -60,9 +64,12 @@ class MainWindow(QMainWindow):
         QPushButton:disabled {color: gray;}
     """
     
-    def __init__(self, backend):
+    def __init__(self):
         super().__init__()
-        self.backend = backend
+        self.films: list[dt.Film] = []
+        self.category_rules: list[dt.CategoryRule] = []
+        self.current_layout: dt.LayoutResult | None = None
+        self.phase1_layout: dt.LayoutResult | None = None
         self.table_model = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -93,6 +100,7 @@ class MainWindow(QMainWindow):
         self.ui.btn_exit.setIcon(qta.icon('fa5s.times', color='white'))
         self.shortcut_search = QShortcut(QKeySequence("Ctrl+F"), self)
         self.shortcut_search.activated.connect(self.search_film)
+        
         for btn in [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]:
             btn.setIconSize(QSize(30, 30))
         self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
@@ -139,12 +147,18 @@ class MainWindow(QMainWindow):
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
-                ignored_films = self.backend.load_data(file_name)
-                self.ui.btn_create.setEnabled(True)
-                self.table_model = FilmTableModel(self.backend.result_table, self.backend.categories)
+                self.films, self.category_rules, ignored_films = loader.load_database(file_name)
+                headers = [rule.name for rule in self.category_rules]
+                empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
+                self.table_model = FilmTableModel(empty_table, headers)
                 self.ui.tableView.setModel(self.table_model)
                 self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
                 self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+                self.current_layout = None
+                self.ui.btn_create.setEnabled(True)
+                self.ui.btn_rebuffer.setEnabled(False)
+                self.ui.btn_reset.setEnabled(False)
+                self.statusBar().showMessage("Databáze úspěšně načtena.", 5000)
             finally:
                 QApplication.restoreOverrideCursor()
             if ignored_films:
@@ -153,14 +167,18 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Chyba", str(e))
             
     def create_unique_films(self):
+        if not self.films or not self.category_rules:
+            QMessageBox.information(self, "Upozornění", "Nejdříve načtěte data z Excelu.")
+            return
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
-                self.backend.reset()
-                new_data, message = self.backend.get_carousel_data_unique()
+                self.current_layout = builder.generate_layout(self.films, self.category_rules)
+                self.phase1_layout = copy.deepcopy(self.current_layout)
+                
                 if self.table_model:
-                    self.table_model.update_data(new_data)
-                    self.statusBar().showMessage(message, 5000)
+                    self.table_model.update_data(self.current_layout.result_table)
+                    self.statusBar().showMessage(self.current_layout.message, 5000)
                     self.ui.btn_rebuffer.setEnabled(True)
                     self.ui.btn_reset.setEnabled(True)
             finally:
@@ -169,28 +187,34 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Chyba", str(e))
         
     def fill_from_rebuffer(self):
+        if not self.phase1_layout:
+            QMessageBox.information(self, "Upozornění", "Doplňování lze spustit až po vytvoření unikátního rozvrhu.")
+            return
         try:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
-                new_data, message = self.backend.get_carousel_data_additional()
+                self.current_layout = copy.deepcopy(self.phase1_layout)
+                self.current_layout = builder.refill_empty_slots(self.current_layout, self.films, self.category_rules)
+                
                 if self.table_model:
-                    self.table_model.update_data(new_data)
-                    self.statusBar().showMessage(message, 5000)
+                    self.table_model.update_data(self.current_layout.result_table)
+                    self.statusBar().showMessage(self.current_layout.message, 5000)
             finally:
                 QApplication.restoreOverrideCursor()
         except Exception as e:
             QMessageBox.critical(self, "Chyba", str(e))
         
     def reset_table(self):
-        self.backend.reset()
-        if self.table_model:
-            self.table_model.update_data(self.backend.result_table)
+        self.current_layout = None
+        if self.table_model and self.category_rules:
+            empty_table = [["" for _ in range(len(self.category_rules))] for _ in range(10)]
+            self.table_model.update_data(empty_table)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
             self.ui.btn_rebuffer.setEnabled(False)
             self.ui.btn_reset.setEnabled(False)
             
     def search_film(self):
-        if not self.table_model or not self.backend.used_films:
+        if not self.table_model or not self.current_layout or not self.current_layout.used_films:
             QMessageBox.information(self, "Hledání", "Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
             return
             

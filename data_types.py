@@ -16,11 +16,11 @@ class CategoryRule:
 @dataclass
 class LayoutResult:
     result_table: List[List[str]]
-    cat_counts: Dict[str, int]
+    category_counts: Dict[str, int]
     used_films: Set[int]
     unassigned_films: List[tuple[Film, str]] = field(default_factory=list)
     message: str = ""
     
     @property
     def total_placed(self) -> int:
-        return sum(self.cat_counts.values())
+        return sum(self.category_counts.values())

@@ -1,14 +1,15 @@
 import pandas as pd
-import models as md
+import data_types as dt
+import random
 
 def get_movie_categories(row, categories) -> tuple[str, ...]:
     bool_values = row[categories].astype(str).str.lower().tolist() #vezme bool hodnoty u daného filmu a vloží do listu
     return tuple(cat for cat, val in zip(categories, bool_values) if val == "true") #list s kategoriemi, do kterých daný film patří
 
-def get_all_category_names(df): #vrátí hlavičku od 2. sloupce, tedy kategorie
+def get_all_category_names(df) -> list[str]: #vrátí hlavičku od 2. sloupce, tedy kategorie
     return [col for col in df.columns if col not in {"ID", "Film", "Priorita"}]
 
-def load_database(file_path: str) -> tuple[list[md.Film], list[str]]:
+def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule], list[str]]:
     ignored_films = []
     valid_films = []
     
@@ -44,7 +45,11 @@ def load_database(file_path: str) -> tuple[list[md.Film], list[str]]:
     
     for _, row in df.iterrows():
         film_cats = get_movie_categories(row, categories)
-        new_film = md.Film(id = int(row["ID_num"]), title = str(row["Film"]), priority = int(row["Priorita_num"]), categories = film_cats)
+        new_film = dt.Film(id = int(row["ID_num"]), title = str(row["Film"]), priority = int(row["Priorita_num"]), categories = film_cats)
         valid_films.append(new_film)
+    
+    random.shuffle(valid_films)
+    capacity_exceptions = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná velikost 3": 1, "Náš výběr": 5}
+    category_rules = [dt.CategoryRule(name = cat, capacity = capacity_exceptions.get(cat, 10)) for cat in categories]
         
-    return valid_films, ignored_films
+    return valid_films, category_rules, ignored_films
