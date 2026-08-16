@@ -1,4 +1,4 @@
-# Film Layout Manager (Filmana - generátor rozvržení filmů - GRF ver. 3.1)
+# Film Layout Manager - Filmana GRF (Generátor rozvržení filmů) 3.1
 
 ## Description
 
@@ -12,6 +12,23 @@ Film Layout Manager is a Python-based desktop application that helps organize fi
 * **Smart auto-fill (Rebuffer):** The system first generates a layout of strictly unique films (Phase 1) and can subsequently fill any remaining empty slots from a rebuffer without violating the maximum occurrences rule (Phase 2).
 * **Excel integration:** Directly loads and parses film databases from `.xlsx` files using `pandas` with strict data validation (checks for missing titles, invalid IDs, and duplicates).
 * **Quick search:** Easily search the generated results table using the `Ctrl+F` shortcut.
+
+## Input Data Format (Excel Database)
+
+The application expects an Excel file (`.xlsx`) structured with a header row at the top. The file must adhere to the following column rules:
+
+### Required Mandatory Columns
+1. **`ID`**: A unique positive integer identifying each film (e.g., `1`, `95`, `271`).
+2. **`Film`**: The title/name of the movie (e.g., `Do všech končin země`). Must not be empty.
+3. **`Priorita`**: An integer priority level from **`1`** to **`4`** (where `1` is the highest priority for placement).
+
+### Category Columns
+All additional columns to the right of `Priorita` are dynamically interpreted as **categories** (e.g., `Obsah zdarma`, `Plná velikost 1`, `Náš výběr`, `Drama`, `Pro děti`, etc.).
+
+* **Accepted values for category membership (True):** `True`, `1`, `ano`, `yes`, `x`, `y`
+* **Accepted values for non-membership (False):** `False`, `0`, `ne`, `no`, `nan`, empty cell
+
+> **Note:** Any row containing invalid numbers in `ID`/`Priorita`, duplicate titles/IDs, or unrecognized text in category cells will be safely skipped during validation and listed in a summary report.
 
 ## Prerequisites
 
