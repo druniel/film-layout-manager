@@ -1,3 +1,2 @@
 -předělat readme
--exe zabalení
 -zamknutí pozic

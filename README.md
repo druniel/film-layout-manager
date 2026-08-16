@@ -1,37 +1,52 @@
-# Film Layout Manager (Filmana generátor rozvržení filmů)
+# Film Layout Manager (Filmana - generátor rozvržení filmů - GRF ver. 3.1)
 
 ## Description
 
-Film Layout Manager is a Python-based desktop application that helps organize films into various categories using a priority-based system. It features a dynamic data table, a modern dark user interface, and graph-based data distribution logic.
+Film Layout Manager is a Python-based desktop application that helps organize films into various categories using a priority-based system. It utilizes graph theory and network flow algorithms for optimal data distribution.
 
 ## Features
 
-* **Dynamic desktop interface:** Built with `PySide6` and styled with `qdarktheme` for a modern, native look.
-* **Collapsible side menu:** Interactive navigation featuring vector icons powered by `qtawesome`.
-* **Priority-based film placement:** Uses `networkx` directed flow graphs to optimally distribute films into categories based on priorities and weight rules.
-* **Excel integration:** Directly loads and parses film databases from `.xlsx` files using `pandas`.
-* **Smart auto-fill:** Capabilities to generate a layout of unique films and subsequently refill any remaining empty spots from a secondary rebuffer.
+* **Dynamic desktop interface:** Built with `PySide6` and styled with `qdarktheme` for a modern, native look featuring vector icons powered by `qtawesome`.
+* **Multithreading:** Heavy calculations and Excel parsing run in the background using `QThread`. The application remains fully responsive and provides real-time feedback via the status bar.
+* **Priority-based film placement:** Uses `networkx` directed flow graphs (Minimum Cost Flow algorithm) to optimally distribute films into categories based on priorities, weight rules, and capacities.
+* **Smart auto-fill (Rebuffer):** The system first generates a layout of strictly unique films (Phase 1) and can subsequently fill any remaining empty slots from a rebuffer without violating the maximum occurrences rule (Phase 2).
+* **Excel integration:** Directly loads and parses film databases from `.xlsx` files using `pandas` with strict data validation (checks for missing titles, invalid IDs, and duplicates).
+* **Quick search:** Easily search the generated results table using the `Ctrl+F` shortcut.
 
 ## Prerequisites
 
 * Python 3.x
-* Required Python packages (install via `pip install -r requirements.txt`). Key dependencies include `PySide6`, `pandas`, `networkx`, `openpyxl`, `pyqtdarktheme`, and `QtAwesome`.
+* Required Python packages (install via `pip install -r requirements.txt`). Key dependencies include `PySide6`, `pandas`, `networkx`, `openpyxl`, `pyqtdarktheme`, `QtAwesome`, and `pyinstaller`.
 
-## Installation
+## Installation and Execution
 
-1. Clone this repository.
+**Option A: Running from Source**
+1. Clone this repository or extract the files.
 2. Install the required dependencies:
 ```sh
 pip install -r requirements.txt
 ```
-
-## Usage
-
-1. Run the application using the main entry script:
+3. Run the application using the main entry script:
 ```sh
 python main.py
 ```
-2. Once the application opens, click on **Načíst databázi** to load your `.xlsx` film database.
+
+**Option B: Compiling to .exe (For Windows)**
+The application can be bundled into a single standalone executable file that does not require Python to be installed on the target machine.
+1. Install PyInstaller:
+```sh
+pip install pyinstaller
+```
+2. Run the following build command:
+```sh
+pyinstaller --noconsole --onefile --name "Filmana generátor rozvržení filmů 3.1" --icon="img/filmana-layout-dark-tile.ico" --add-data "img/filmana-layout-dark-tile.ico;img" main.py
+```
+3. The compiled executable will be located in the newly created `dist` folder.
+
+## Usage
+
+1. Run the application (via Python or the compiled `.exe`).
+2. Once the application opens, click on **Načíst databázi** (Load Database) to load your `.xlsx` film database.
 3. Use the action buttons in the side menu to generate and interact with the layout.
 
 ## Interface
@@ -39,16 +54,17 @@ python main.py
 The desktop GUI provides the following main actions:
 
 * **Načíst databázi** - Opens a file dialog to load the Excel database.
-* **Doplnit unikátní filmy** - Triggers the graph flow algorithm to fill the table with unique films.
-* **Doplnit prázdná místa** - Fills remaining empty slots in the table using items from the rebuffer.
+* **Doplnit unikátní filmy** - Triggers the graph flow algorithm to fill the table with unique films (Phase 1).
+* **Doplnit prázdná místa** - Fills remaining empty slots in the table using items from the rebuffer (Phase 2).
 * **Reset** - Clears the current table layout and restores it to its initial state.
-* **Zavřít aplikaci** - Safely exits the program.
+* **Zavřít aplikaci** - Safely exits the program (includes protection against closing during active background calculations).
 
 ## Project Structure
 
-* `main.py` - The main application entry point that initializes the backend processor and the GUI window.
-* `gui.py` - Contains the `MainWindow` class, UI logic, custom QSS styling, and the `FilmTableModel` for displaying data.
-* `ui_main.py` - The raw, auto-generated UI layout file compiled from Qt Designer.
-* `backend.py` - Contains the `FilmProcessor` class acting as the bridge between the GUI and data operations.
-* `aux_functions.py` - Core algorithmic logic, including Pandas data cleaning, graph building, and free space calculations.
+* `main.py` - The main application entry point that sets the theme, application icon, and maximizes the window on startup.
+* `gui.py` - Contains the `MainWindow` class (main user interface layer), background worker threads (`LoaderWorker`, `BuilderWorker`), and the table data model (`FilmTableModel`).
+* `ui_main.py` - The raw UI layout file auto-generated by Qt Designer.
+* `builder.py` - The algorithmic core that builds `networkx` directed flow graphs for optimal data distribution.
+* `loader.py` - Module for safe extraction, parsing, and strict validation of raw data using `pandas` DataFrames.
+* `data_types.py` - Definition of modern strict data classes (`Film`, `CategoryRule`, `LayoutResult`).
 * `requirements.txt` - List of exact package versions needed to run the application.
