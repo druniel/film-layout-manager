@@ -59,7 +59,7 @@ def _build_flow_graph(films: list[dt.Film], category_rules: list[dt.CategoryRule
             G.add_edge(movie_node, cat_node, capacity=1, weight=edge_weight) #propojení uzlu filmu > s uzlem kategorie; kapacita = film může být přiřazen jen do jedné kategorie, váha = jak moc je pro danou kategorii vhodný, nižší váha = lepší
     return G
 
-def _extract_flow_results(flow_dict, films, category_rules, table, cat_counts, used_films, film_to_col):
+def _extract_flow_results(flow_dict, films, category_rules, table, id_table, cat_counts, used_films, film_to_col):
     cat_to_col = {rule.name: idx for idx, rule in enumerate(category_rules)}
     
     for film in films:
@@ -72,16 +72,19 @@ def _extract_flow_results(flow_dict, films, category_rules, table, cat_counts, u
                 
                 if row_idx < category_rules[col_idx].capacity:
                     table[row_idx][col_idx] = film.title
+                    id_table[row_idx][col_idx] = film.id
                     cat_counts[cat_name] += 1
                     used_films.add(film.id)
                     film_to_col.setdefault(film.id, []).append(col_idx) #pokud film v tomto sledovacím dictu neexistuje, vytvoří nový klíč a k němu list. pak vloží do listu číslo kategorie
 
 def generate_layout(films: list[dt.Film], category_rules: list[dt.CategoryRule]) -> dt.LayoutResult:
     table = [["" for _ in range(len(category_rules))] for _ in range(10)]
+    id_table: list[list[int | None]] = [[None for _ in range(len(category_rules))] for _ in range(10)]
     cat_counts = {rule.name: 0 for rule in category_rules}
     capacities = {rule.name: rule.capacity for rule in category_rules}
     used_films = set()
     film_to_col = {}
+    unassigned_films = []
     shuffled_films = list(films)
     random.shuffle(shuffled_films)
     sorted_films = sorted(shuffled_films, key=lambda f: f.priority)
@@ -92,29 +95,38 @@ def generate_layout(films: list[dt.Film], category_rules: list[dt.CategoryRule])
     except Exception as e:
         raise RuntimeError(f"Chyba v NetworkX (Fáze 1): {e}")
 
-    _extract_flow_results(flow_dict, sorted_films, category_rules, table, cat_counts, used_films, film_to_col)
-    unassigned_films = [(f, "Kapacita kategorií byla naplněna nebo chybí vhodné kategorie") for f in sorted_films if f.id not in used_films]
+    _extract_flow_results(flow_dict, sorted_films, category_rules, table, id_table, cat_counts, used_films, film_to_col)
+    
+    for f in sorted_films:
+        if f.id not in used_films:
+            if not f.categories:
+                unassigned_films.append((f, "Film nemá v Excelu přiřazenou žádnou kategorii"))
+            else:
+                unassigned_films.append((f, "Kapacita vhodných kategorií je plná"))
+    
     message = f"Úspěšně přiřazeno {len(used_films)} unikátních filmů do {sum(cat_counts.values())} okýnek."
-    return dt.LayoutResult(table, cat_counts, used_films, unassigned_films, message)
+    return dt.LayoutResult(table, id_table, cat_counts, used_films, unassigned_films, message)
 
 def refill_empty_slots(layout: dt.LayoutResult, films: list[dt.Film], category_rules: list[dt.CategoryRule]) -> dt.LayoutResult:
     total_capacity = sum(rule.capacity for rule in category_rules)
+    film_to_col = {}
     
     if (total_capacity - layout.total_placed) <= 0:
         layout.message = "Není co doplňovat, všechna místa jsou plná."
         return layout
     
-    shuffled_films = list(films)
+    for row in layout.id_table:
+        for c_idx, film_id in enumerate(row):
+            if film_id is not None:
+                film_to_col.setdefault(film_id, []).append(c_idx)
+    
+    if any(len(cols) > 2 for cols in film_to_col.values()):
+        raise ValueError("Kritická chyba: Vstupní rozvržení porušuje pravidlo maximálně 2 výskytů na film.")
+    
+    eligible_films = [f for f in films if len(film_to_col.get(f.id, [])) < 2]
+    shuffled_films = list(eligible_films)
     random.shuffle(shuffled_films)
     remaining_caps = {rule.name: rule.capacity - layout.category_counts.get(rule.name, 0) for rule in category_rules}
-    
-    film_to_col = {}
-    title_to_id = {film.title: film.id for film in films}
-    for r_idx, row in enumerate(layout.result_table):
-        for c_idx, title in enumerate(row):
-            if title and title in title_to_id:
-                film_to_col.setdefault(title_to_id[title], []).append(c_idx)
-
     G = _build_flow_graph(shuffled_films, category_rules, remaining_caps, film_to_col, spacing=MIN_SPACING)
     
     try:
@@ -123,8 +135,7 @@ def refill_empty_slots(layout: dt.LayoutResult, films: list[dt.Film], category_r
         raise RuntimeError(f"Chyba v NetworkX (Fáze 2): {e}")
 
     films_before = layout.total_placed
-    _extract_flow_results(flow_dict, shuffled_films, category_rules, layout.result_table, layout.category_counts, layout.used_films, film_to_col)
-    
+    _extract_flow_results(flow_dict, shuffled_films, category_rules, layout.result_table, layout.id_table, layout.category_counts, layout.used_films, film_to_col)
     films_after = layout.total_placed
     layout.message = f"Úspěšně doplněno {films_after - films_before} filmů z rebufferu."
     return layout

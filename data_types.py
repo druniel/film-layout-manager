@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional
 
 @dataclass(frozen=True)
 class Film:
@@ -15,10 +14,11 @@ class CategoryRule:
     
 @dataclass
 class LayoutResult:
-    result_table: List[List[str]]
-    category_counts: Dict[str, int]
-    used_films: Set[int]
-    unassigned_films: List[tuple[Film, str]] = field(default_factory=list)
+    result_table: list[list[str]]
+    id_table: list[list[int | None]]
+    category_counts: dict[str, int]
+    used_films: set[int]
+    unassigned_films: list[tuple[Film, str]] = field(default_factory=list)
     message: str = ""
     
     @property

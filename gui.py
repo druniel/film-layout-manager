@@ -155,6 +155,7 @@ class MainWindow(QMainWindow):
                 self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
                 self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
                 self.current_layout = None
+                self.phase1_layout = None
                 self.ui.btn_create.setEnabled(True)
                 self.ui.btn_rebuffer.setEnabled(False)
                 self.ui.btn_reset.setEnabled(False)
@@ -178,7 +179,12 @@ class MainWindow(QMainWindow):
                 
                 if self.table_model:
                     self.table_model.update_data(self.current_layout.result_table)
-                    self.statusBar().showMessage(self.current_layout.message, 5000)
+                    final_message = self.current_layout.message
+                    if self.current_layout.unassigned_films:
+                        unassigned_count = len(self.current_layout.unassigned_films)
+                        titles = ", ".join([film.title for film, _ in self.current_layout.unassigned_films])
+                        final_message += f" | Nezařazeno ({unassigned_count}): {titles}"
+                    self.statusBar().showMessage(final_message, 8000)
                     self.ui.btn_rebuffer.setEnabled(True)
                     self.ui.btn_reset.setEnabled(True)
             finally:
@@ -206,6 +212,8 @@ class MainWindow(QMainWindow):
         
     def reset_table(self):
         self.current_layout = None
+        self.phase1_layout = None
+        
         if self.table_model and self.category_rules:
             empty_table = [["" for _ in range(len(self.category_rules))] for _ in range(10)]
             self.table_model.update_data(empty_table)

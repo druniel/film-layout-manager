@@ -1,10 +1,22 @@
 import pandas as pd
 import data_types as dt
 import random
+import math
 
-def get_movie_categories(row, categories) -> tuple[str, ...]:
-    bool_values = row[categories].astype(str).str.lower().tolist() #vezme bool hodnoty u daného filmu a vloží do listu
-    return tuple(cat for cat, val in zip(categories, bool_values) if val == "true") #list s kategoriemi, do kterých daný film patří
+def get_movie_categories(row, categories, excel_row, display_title, ignored_films) -> tuple[str, ...] | None:
+    valid_cats = []
+    truthy = {"true", "1", "ano", "yes", "x", "y"}
+    falsy = {"false", "0", "ne", "no", "nan", "", "none", "n"}
+    
+    for cat in categories:
+        val = str(row[cat]).strip().lower()
+        
+        if val in truthy:
+            valid_cats.append(cat)
+        elif val not in falsy:
+            ignored_films.append(f"Řádek {excel_row}: '{display_title}' - Neplatná hodnota '{row[cat]}' v kategorii '{cat}'.")
+            return None
+    return tuple(valid_cats) #list s kategoriemi, do kterých daný film patří
 
 def get_all_category_names(df) -> list[str]: #vrátí hlavičku od 2. sloupce, tedy kategorie
     return [col for col in df.columns if col not in {"ID", "Film", "Priorita"}]
@@ -12,14 +24,19 @@ def get_all_category_names(df) -> list[str]: #vrátí hlavičku od 2. sloupce, t
 def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule], list[str]]:
     ignored_films = []
     valid_films = []
+    seen_ids = set()
+    seen_titles = set()
+    required_cols = {'ID', 'Film', 'Priorita'}
     
     try:
         df = pd.read_excel(file_path, header=0)
     except Exception as e:
         raise ValueError("Vybraný soubor nelze načíst. Ujistěte se, že jde o platnou databázi filmů ve formátu Excel.")
         
-    if not {'ID', 'Film', 'Priorita'}.issubset(df.columns):
-        raise ValueError("Vyberte prosím správnou databázi.")
+    if not required_cols.issubset(df.columns):
+        missing_cols = required_cols - set(df.columns)
+        missing_str = ", ".join(missing_cols)
+        raise ValueError(f"Vybraná databáze neobsahuje povinné sloupce. Chybí: {missing_str}")
     
     categories = get_all_category_names(df)
     df["_excel_row"] = df.index + 2 # Uloží původní čísla řádků z Excelu pro chybové hlášky, hlavička = +1 a pandas začíná na 0 takže další +1; vytváří nový pomocný sloupec
@@ -27,29 +44,61 @@ def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule],
     df["ID_num"] = pd.to_numeric(df["ID"], errors='coerce') #převádí první sloupec s prioritami na čísla a nečíselné hodnoty na NaN; vytváří nový pomocný sloupec
     df["Priorita_num"] = pd.to_numeric(df["Priorita"], errors='coerce'); #vytváří nový pomocný sloupec
     
-    invalid_ids = df[df["ID_num"].isna()] # Záchyt filmů s neplatným nebo chybějícím ID
-    for _, row in invalid_ids.iterrows():
-        title = row["Film"] if pd.notna(row["Film"]) and str(row["Film"]).strip() != "" else "Neznámý název"
-        ignored_films.append(f"Řádek {row['_excel_row']}: '{title}' - neplatné nebo chybějící ID")
-        
-    invalid_priorities = df[df["Priorita_num"].isna() & df["ID_num"].notna()] # Záchyt filmů s neplatnou nebo chybějící prioritou
-    for _, row in invalid_priorities.iterrows():
-        ignored_films.append(f"Řádek {row['_excel_row']}: '{row['Film']}' - neplatná priorita")
-        
-    df["Film"] = df["Film"].astype(str).str.strip()
-    invalid_titles = df[df["Film"].str.lower().isin(['', 'nan']) & df["ID_num"].notna() & df["Priorita_num"].notna()] # Záchyt filmů s chybějícím názvem
-    for _, row in invalid_titles.iterrows():
-        ignored_films.append(f"Řádek {row['_excel_row']}: ID {int(row['ID_num'])} - chybí název filmu")
-        
-    df = df[df["ID_num"].notna() & df["Priorita_num"].notna() & ~df["Film"].str.lower().isin(['', 'nan'])].copy() # Filtrace pouze platných řádků (zůstane to, co nemá nikde NaN a má název)
-    
     for _, row in df.iterrows():
-        film_cats = get_movie_categories(row, categories)
-        new_film = dt.Film(id = int(row["ID_num"]), title = str(row["Film"]), priority = int(row["Priorita_num"]), categories = film_cats)
+        excel_row = row["_excel_row"]
+        
+        raw_title_val = row["Film"]
+        if pd.isna(raw_title_val):
+            ignored_films.append(f"Řádek {excel_row}: Chybí název filmu.")
+            continue
+        
+        raw_title = str(raw_title_val).strip()
+        if not raw_title or raw_title.lower() == "nan":
+            ignored_films.append(f"Řádek {excel_row}: Chybí název filmu.")
+            continue
+        
+        title_cf = raw_title.casefold()
+        if title_cf in seen_titles:
+            ignored_films.append(f"Řádek {excel_row}: '{raw_title}' - Duplicitní název filmu.")
+            continue
+        
+        raw_id = row["ID_num"]
+        if pd.isna(raw_id) or math.isinf(raw_id) or not float(raw_id).is_integer() or raw_id <= 0:
+            ignored_films.append(f"Řádek {excel_row}: '{raw_title}' - ID musí být platné kladné celé číslo.")
+            continue
+        
+        film_id = int(raw_id)
+        if film_id in seen_ids:
+            ignored_films.append(f"Řádek {excel_row}: '{raw_title}' - Duplicitní ID ({film_id}).")
+            continue
+        
+        raw_priority = row["Priorita_num"]
+        if pd.isna(raw_priority) or math.isinf(raw_priority) or not float(raw_priority).is_integer() or not (1 <= raw_priority <= 4):
+            ignored_films.append(f"Řádek {excel_row}: '{raw_title}' - Priorita musí být celé číslo v rozsahu 1-4.")
+            continue
+        
+        priority = int(raw_priority)
+        film_cats = get_movie_categories(row, categories, excel_row, raw_title, ignored_films)
+        if film_cats is None:
+            continue
+        
+        seen_ids.add(film_id)
+        seen_titles.add(title_cf)
+        new_film = dt.Film(id = film_id, title = raw_title, priority = priority, categories = film_cats)
         valid_films.append(new_film)
+        
+    if not valid_films:
+        raise ValueError("Databáze neobsahuje žádný platný film k zařazení.")
+    
+    if not categories:
+        raise ValueError("Databáze neobsahuje žádné sloupce s kategoriemi.")
     
     random.shuffle(valid_films)
     capacity_exceptions = {"Plná velikost 1": 1, "Plná velikost 2": 1, "Plná velikost 3": 1, "Náš výběr": 5}
     category_rules = [dt.CategoryRule(name = cat, capacity = capacity_exceptions.get(cat, 10)) for cat in categories]
+    
+    for rule in category_rules:
+        if not 0 <= rule.capacity <= 10:
+            raise ValueError(f"Kapacita kategorie '{rule.name}' je nastavena na {rule.capacity}, ale systémový limit je 0 až 10 okýnek.")
         
     return valid_films, category_rules, ignored_films
