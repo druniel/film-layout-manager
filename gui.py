@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QMainWindow, QMessageBox,QFileDialog, QHeaderView, QApplication, QInputDialog
-from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel
+from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel, QThread, Signal
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
 from pathlib import Path
@@ -16,6 +16,44 @@ def get_resource_path(relative_path: str) -> str:
     else:
         base_path = Path(__file__).resolve().parent
     return (base_path / relative_path).as_posix()
+
+class LoaderWorker(QThread):
+    finished_signal = Signal(list, list, list) # vrací: valid_films, category_rules, ignored_films
+    error_signal = Signal(str)
+    
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+        
+    def run(self):
+        try:
+            valid_films, category_rules, ignored_films = loader.load_database(self.file_path)
+            self.finished_signal.emit(valid_films, category_rules, ignored_films)
+        except Exception as e:
+            self.error_signal.emit(str(e))
+
+class BuilderWorker(QThread):
+    finished_signal = Signal(object) # vrací hotový dt.LayoutResult
+    error_signal = Signal(str)
+    
+    def __init__(self, phase: int, films: list[dt.Film], category_rules: list[dt.CategoryRule], layout_backup: dt.LayoutResult | None = None):
+        super().__init__()
+        self.phase = phase
+        self.films = films
+        self.category_rules = category_rules
+        self.layout_backup = layout_backup
+        
+    def run(self):
+        try:
+            if self.phase == 1:
+                result = builder.generate_layout(self.films, self.category_rules)
+            else:
+                if self.layout_backup is None:
+                    raise ValueError("Kritická chyba: Chybí záloha rozvržení pro doplňování rebufferu.")
+                result = builder.refill_empty_slots(self.layout_backup, self.films, self.category_rules)
+            self.finished_signal.emit(result)
+        except Exception as e:
+            self.error_signal.emit(str(e))
 
 class FilmTableModel(QAbstractTableModel):
     def __init__(self, data, headers):
@@ -70,6 +108,8 @@ class MainWindow(QMainWindow):
         self.category_rules: list[dt.CategoryRule] = []
         self.current_layout: dt.LayoutResult | None = None
         self.phase1_layout: dt.LayoutResult | None = None
+        self.worker: QThread | None = None
+        self.is_busy = False
         self.table_model = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
@@ -139,87 +179,129 @@ class MainWindow(QMainWindow):
         self.ui.frame.setMaximumWidth(new_width)
         
     def load_database(self):
+        if self.is_busy: return
         file_name, _ = QFileDialog.getOpenFileName(self, "Vyberte soubor", "", "Excel soubory (*.xlsx)")
-        
         if not file_name:
             return
+        self.statusBar().showMessage("Načítám a validuji databázi, prosím čekejte...")
+        self.set_ui_busy(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self.worker = LoaderWorker(file_name)
+        self.worker.finished_signal.connect(self._on_load_finished)
+        self.worker.error_signal.connect(self._on_worker_error)
+        self.worker.finished.connect(self._cleanup_worker)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.start()
         
-        try:
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            try:
-                self.films, self.category_rules, ignored_films = loader.load_database(file_name)
-                headers = [rule.name for rule in self.category_rules]
-                empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
-                self.table_model = FilmTableModel(empty_table, headers)
-                self.ui.tableView.setModel(self.table_model)
-                self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-                self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-                self.current_layout = None
-                self.phase1_layout = None
-                self.ui.btn_create.setEnabled(True)
-                self.ui.btn_rebuffer.setEnabled(False)
-                self.ui.btn_reset.setEnabled(False)
-                self.statusBar().showMessage("Databáze úspěšně načtena.", 5000)
-            finally:
-                QApplication.restoreOverrideCursor()
-            if ignored_films:
-                QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
-        except Exception as e:
-            QMessageBox.critical(self, "Chyba", str(e))
+    def set_ui_busy(self, busy: bool):
+        self.is_busy = busy
+        
+        if busy:
+            self.ui.btn_load.setEnabled(False)
+            self.ui.btn_create.setEnabled(False)
+            self.ui.btn_rebuffer.setEnabled(False)
+            self.ui.btn_reset.setEnabled(False)
+            self.ui.btn_exit.setEnabled(False)
+        else:
+            self.ui.btn_load.setEnabled(True)
+            self.ui.btn_exit.setEnabled(True)
+            self.ui.btn_create.setEnabled(bool(self.films and self.category_rules))
+            self.ui.btn_rebuffer.setEnabled(bool(self.phase1_layout))
+            self.ui.btn_reset.setEnabled(bool(self.phase1_layout))
+            
+    def _cleanup_worker(self):
+        QApplication.restoreOverrideCursor()
+        self.set_ui_busy(False)
+        self.worker = None
+        
+    def _on_load_finished(self, valid_films, category_rules, ignored_films):
+        self.statusBar().clearMessage()
+        self.films = valid_films
+        self.category_rules = category_rules
+        self.current_layout = None
+        self.phase1_layout = None
+        headers = [rule.name for rule in self.category_rules]
+        empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
+        self.table_model = FilmTableModel(empty_table, headers)
+        self.ui.tableView.setModel(self.table_model)
+        self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.statusBar().showMessage("Databáze úspěšně načtena.", 5000)
+    
+        if ignored_films:
+            QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
             
     def create_unique_films(self):
+        if self.is_busy: return
         if not self.films or not self.category_rules:
             QMessageBox.information(self, "Upozornění", "Nejdříve načtěte data z Excelu.")
             return
-        try:
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            try:
-                self.current_layout = builder.generate_layout(self.films, self.category_rules)
-                self.phase1_layout = copy.deepcopy(self.current_layout)
-                
-                if self.table_model:
-                    self.table_model.update_data(self.current_layout.result_table)
-                    final_message = self.current_layout.message
-                    if self.current_layout.unassigned_films:
-                        unassigned_count = len(self.current_layout.unassigned_films)
-                        titles = ", ".join([film.title for film, _ in self.current_layout.unassigned_films])
-                        final_message += f" | Nezařazeno ({unassigned_count}): {titles}"
-                    self.statusBar().showMessage(final_message, 8000)
-                    self.ui.btn_rebuffer.setEnabled(True)
-                    self.ui.btn_reset.setEnabled(True)
-            finally:
-                QApplication.restoreOverrideCursor()
-        except Exception as e:
-            QMessageBox.critical(self, "Chyba", str(e))
+        
+        self.statusBar().showMessage("Algoritmus hledá optimální unikátní rozvržení...")
+        self.set_ui_busy(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self.worker = BuilderWorker(phase = 1, films = self.films, category_rules = self.category_rules)
+        self.worker.finished_signal.connect(self._on_phase1_finished)
+        self.worker.error_signal.connect(self._on_worker_error)
+        self.worker.finished.connect(self._cleanup_worker)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.start()
+        
+    def _on_phase1_finished(self, layout_result):
+        self.statusBar().clearMessage()
+        self.current_layout = layout_result
+        self.phase1_layout = copy.deepcopy(self.current_layout)
+        if self.current_layout is None:
+            return
+        if self.table_model:
+            self.table_model.update_data(self.current_layout.result_table)
+        final_message = self.current_layout.message
+        if self.current_layout.unassigned_films:
+            unassigned_count = len(self.current_layout.unassigned_films)
+            titles = ", ".join([film.title for film, _ in self.current_layout.unassigned_films])
+            final_message += f" | Nezařazeno ({unassigned_count}): {titles}"
+        self.statusBar().showMessage(final_message, 8000)
         
     def fill_from_rebuffer(self):
+        if self.is_busy: return
         if not self.phase1_layout:
             QMessageBox.information(self, "Upozornění", "Doplňování lze spustit až po vytvoření unikátního rozvrhu.")
             return
-        try:
-            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-            try:
-                self.current_layout = copy.deepcopy(self.phase1_layout)
-                self.current_layout = builder.refill_empty_slots(self.current_layout, self.films, self.category_rules)
-                
-                if self.table_model:
-                    self.table_model.update_data(self.current_layout.result_table)
-                    self.statusBar().showMessage(self.current_layout.message, 5000)
-            finally:
-                QApplication.restoreOverrideCursor()
-        except Exception as e:
-            QMessageBox.critical(self, "Chyba", str(e))
+        self.statusBar().showMessage("Doplňuji prázdná místa z rebufferu...")
+        self.set_ui_busy(True)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        safe_backup = copy.deepcopy(self.phase1_layout)
+        self.worker = BuilderWorker(phase = 2, films = self.films, category_rules = self.category_rules, layout_backup = safe_backup)
+        self.worker.finished_signal.connect(self._on_phase2_finished)
+        self.worker.error_signal.connect(self._on_worker_error)
+        self.worker.finished.connect(self._cleanup_worker)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker.start()
+        
+    def _on_phase2_finished(self, layout_result):
+        self.statusBar().clearMessage()
+        self.current_layout = layout_result
+        if self.current_layout is None:
+            return
+        if self.table_model:
+            self.table_model.update_data(self.current_layout.result_table)
+        self.statusBar().showMessage(self.current_layout.message, 5000)
+            
+    def _on_worker_error(self, error_msg):
+        self.statusBar().clearMessage()
+        QMessageBox.critical(self, "Chyba", error_msg)
+        self.statusBar().showMessage("Operace selhala.", 5000)
         
     def reset_table(self):
+        if self.is_busy: return
         self.current_layout = None
         self.phase1_layout = None
         
         if self.table_model and self.category_rules:
             empty_table = [["" for _ in range(len(self.category_rules))] for _ in range(10)]
             self.table_model.update_data(empty_table)
+            self.set_ui_busy(False)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
-            self.ui.btn_rebuffer.setEnabled(False)
-            self.ui.btn_reset.setEnabled(False)
             
     def search_film(self):
         if not self.table_model or not self.current_layout or not self.current_layout.used_films:
@@ -249,3 +331,10 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(f"Hledání pro '{text}' dokončeno.", 5000)
             else:
                 QMessageBox.information(self, "Hledání", f"Film '{text}' nebyl nalezen.")
+                
+    def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavre se
+        if getattr(self, "is_busy", False):
+            QMessageBox.warning(self, "Probíhá výpočet", "Aplikaci nelze zavřít, dokud probíhá načítání nebo výpočet.\nProsím, vyčkejte na dokončení.")
+            event.ignore()
+        else:
+            super().closeEvent(event)
