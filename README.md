@@ -1,4 +1,4 @@
-# Film Layout Manager - Filmana GRF (Generátor rozvržení filmů) 3.1
+# Film Layout Manager - Filmana GRF (Generátor rozvržení filmů)
 
 ## Description
 
