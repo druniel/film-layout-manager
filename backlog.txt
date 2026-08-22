@@ -1,2 +1,1 @@
--předělat readme
 -zamknutí pozic

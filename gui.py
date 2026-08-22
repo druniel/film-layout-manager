@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QMessageBox,QFileDialog, QHeaderView, QApplication, QInputDialog
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog
 from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel, QThread, Signal
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
@@ -10,8 +10,8 @@ import loader
 import builder
 from ui_main import Ui_MainWindow
 
-def get_resource_path(relative_path: str) -> str:
-    if hasattr(sys, '_MEIPASS'):
+def get_resource_path(relative_path: str) -> str: 
+    if hasattr(sys, '_MEIPASS'): # ptá se, jestli běží jako sbalené exe, pokud jo ta v sys._mespass leží cesta např. ke složce img kterou si vytvořil windows při spuštění; pokud ne tak ji hledá v normální složce img
         base_path = Path(getattr(sys, '_MEIPASS'))
     else:
         base_path = Path(__file__).resolve().parent
@@ -41,7 +41,7 @@ class BuilderWorker(QThread):
         self.phase = phase
         self.films = films
         self.category_rules = category_rules
-        self.layout_backup = layout_backup
+        self.layout_backup = layout_backup # Záloha tabulky potřebná pro Fázi 2
         
     def run(self):
         try:
@@ -55,7 +55,7 @@ class BuilderWorker(QThread):
         except Exception as e:
             self.error_signal.emit(str(e))
 
-class FilmTableModel(QAbstractTableModel):
+class FilmTableModel(QAbstractTableModel): # PŘEKLADATEL propojující surová data s vizuální tabulkou
     def __init__(self, data, headers):
         super().__init__()
         self._data = data
@@ -67,7 +67,7 @@ class FilmTableModel(QAbstractTableModel):
     def columnCount(self,parent = None):
         return len(self._headers)
     
-    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
+    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole): # při volání funkce bez specifikování toho, co chci, automaticky přepodkládá, že chci displayrole
         if not index.isValid():
             return None
         if role == Qt.ItemDataRole.DisplayRole:
@@ -112,77 +112,36 @@ class MainWindow(QMainWindow):
         self.is_busy = False
         self.table_model = None
         self.ui = Ui_MainWindow()
-        self.ui.setupUi(self)
+        self.ui.setupUi(self) # načte design z ui_main.py
         self.setWindowTitle("Filmana generátor rozvržení filmů")
-        self.is_menu_expanded = False
-        self.ui.btn_load.hide()
-        self.ui.btn_create.hide()
-        self.ui.btn_rebuffer.hide()
-        self.ui.btn_reset.hide()
-        self.ui.btn_menu.setText("")
-        self.ui.btn_exit.setText("")
-        self.ui.tableView.setStyleSheet("QHeaderView::section {font-weight: bold; font-size: 14px;}")
-        self.ui.tableView.setWordWrap(True)
-        self.ui.btn_create.setEnabled(False)
-        self.ui.btn_rebuffer.setEnabled(False)
-        self.ui.btn_reset.setEnabled(False)
-        self.ui.btn_menu.clicked.connect(self.toggle_menu)
-        self.ui.btn_load.clicked.connect(self.load_database)
-        self.ui.btn_create.clicked.connect(self.create_unique_films)
-        self.ui.btn_rebuffer.clicked.connect(self.fill_from_rebuffer)
-        self.ui.btn_reset.clicked.connect(self.reset_table)
-        self.ui.btn_exit.clicked.connect(self.close)
         self.ui.btn_menu.setIcon(qta.icon('fa5s.bars', color='white'))
         self.ui.btn_load.setIcon(qta.icon('fa5s.folder-open', color='white'))
         self.ui.btn_create.setIcon(qta.icon('fa5s.star', color='white', color_disabled='gray'))
         self.ui.btn_rebuffer.setIcon(qta.icon('fa5s.puzzle-piece', color='white', color_disabled='gray'))
         self.ui.btn_reset.setIcon(qta.icon('fa5s.sync-alt', color='white', color_disabled='gray'))
         self.ui.btn_exit.setIcon(qta.icon('fa5s.times', color='white'))
+        self.ui.tableView.setStyleSheet("QHeaderView::section {font-weight: bold; font-size: 14px;}")
+        self.ui.tableView.setWordWrap(True)
+        self.ui.btn_menu.clicked.connect(self.toggle_menu)
+        self.ui.btn_load.clicked.connect(self.load_database)
+        self.ui.btn_create.clicked.connect(self.create_unique_films)
+        self.ui.btn_rebuffer.clicked.connect(self.fill_from_rebuffer)
+        self.ui.btn_reset.clicked.connect(self.reset_table)
+        self.ui.btn_exit.clicked.connect(self.close)
         self.shortcut_search = QShortcut(QKeySequence("Ctrl+F"), self)
         self.shortcut_search.activated.connect(self.search_film)
-        
-        for btn in [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]:
-            btn.setIconSize(QSize(30, 30))
-        self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
+        self.is_menu_expanded = False
+        self._apply_menu_state()
+        self.set_ui_busy(False) # povypíná tlačítka, protože zatím nemáme data
         
     def toggle_menu(self):
-        buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]
-        
-        if not self.is_menu_expanded:
-            new_width = 200
-            self.is_menu_expanded = True
-            self.ui.frame.setStyleSheet(self.STYLE_EXPANDED)
-            for btn in buttons:
-                btn.setIconSize(QSize(20, 20))
-            self.ui.btn_menu.setIcon(qta.icon('fa5s.chevron-left', color='white'))
-            self.ui.btn_menu.setText("  Skrýt menu")
-            self.ui.btn_exit.setText("  Zavřít aplikaci")
-            self.ui.btn_create.show()
-            self.ui.btn_load.show()
-            self.ui.btn_rebuffer.show()
-            self.ui.btn_reset.show()
-        else:
-            new_width = 50
-            self.is_menu_expanded = False
-            self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
-            for btn in buttons:
-                btn.setIconSize(QSize(30, 30))
-            self.ui.btn_menu.setIcon(qta.icon('fa5s.bars', color='white'))
-            self.ui.btn_menu.setText("")
-            self.ui.btn_exit.setText("")
-            self.ui.btn_create.hide()
-            self.ui.btn_load.hide()
-            self.ui.btn_rebuffer.hide()
-            self.ui.btn_reset.hide()
-        
-        self.ui.frame.setMinimumWidth(new_width)
-        self.ui.frame.setMaximumWidth(new_width)
+        self.is_menu_expanded = not self.is_menu_expanded
+        self._apply_menu_state()
         
     def load_database(self):
         if self.is_busy: return
         file_name, _ = QFileDialog.getOpenFileName(self, "Vyberte soubor", "", "Excel soubory (*.xlsx)")
-        if not file_name:
-            return
+        if not file_name: return
         self.statusBar().showMessage("Načítám a validuji databázi, prosím čekejte...")
         self.set_ui_busy(True)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -192,45 +151,7 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self._cleanup_worker)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
-        
-    def set_ui_busy(self, busy: bool):
-        self.is_busy = busy
-        
-        if busy:
-            self.ui.btn_load.setEnabled(False)
-            self.ui.btn_create.setEnabled(False)
-            self.ui.btn_rebuffer.setEnabled(False)
-            self.ui.btn_reset.setEnabled(False)
-            self.ui.btn_exit.setEnabled(False)
-        else:
-            self.ui.btn_load.setEnabled(True)
-            self.ui.btn_exit.setEnabled(True)
-            self.ui.btn_create.setEnabled(bool(self.films and self.category_rules))
-            self.ui.btn_rebuffer.setEnabled(bool(self.phase1_layout))
-            self.ui.btn_reset.setEnabled(bool(self.phase1_layout))
-            
-    def _cleanup_worker(self):
-        QApplication.restoreOverrideCursor()
-        self.set_ui_busy(False)
-        self.worker = None
-        
-    def _on_load_finished(self, valid_films, category_rules, ignored_films):
-        self.statusBar().clearMessage()
-        self.films = valid_films
-        self.category_rules = category_rules
-        self.current_layout = None
-        self.phase1_layout = None
-        headers = [rule.name for rule in self.category_rules]
-        empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
-        self.table_model = FilmTableModel(empty_table, headers)
-        self.ui.tableView.setModel(self.table_model)
-        self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.statusBar().showMessage("Databáze úspěšně načtena.", 5000)
-    
-        if ignored_films:
-            QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
-            
+                
     def create_unique_films(self):
         if self.is_busy: return
         if not self.films or not self.category_rules:
@@ -247,21 +168,6 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
         
-    def _on_phase1_finished(self, layout_result):
-        self.statusBar().clearMessage()
-        self.current_layout = layout_result
-        self.phase1_layout = copy.deepcopy(self.current_layout)
-        if self.current_layout is None:
-            return
-        if self.table_model:
-            self.table_model.update_data(self.current_layout.result_table)
-        final_message = self.current_layout.message
-        if self.current_layout.unassigned_films:
-            unassigned_count = len(self.current_layout.unassigned_films)
-            titles = ", ".join([film.title for film, _ in self.current_layout.unassigned_films])
-            final_message += f" | Nezařazeno ({unassigned_count}): {titles}"
-        self.statusBar().showMessage(final_message, 8000)
-        
     def fill_from_rebuffer(self):
         if self.is_busy: return
         if not self.phase1_layout:
@@ -277,20 +183,6 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self._cleanup_worker)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
-        
-    def _on_phase2_finished(self, layout_result):
-        self.statusBar().clearMessage()
-        self.current_layout = layout_result
-        if self.current_layout is None:
-            return
-        if self.table_model:
-            self.table_model.update_data(self.current_layout.result_table)
-        self.statusBar().showMessage(self.current_layout.message, 5000)
-            
-    def _on_worker_error(self, error_msg):
-        self.statusBar().clearMessage()
-        QMessageBox.critical(self, "Chyba", error_msg)
-        self.statusBar().showMessage("Operace selhala.", 5000)
         
     def reset_table(self):
         if self.is_busy: return
@@ -332,9 +224,107 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.information(self, "Hledání", f"Film '{text}' nebyl nalezen.")
                 
-    def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavre se
+    def set_ui_busy(self, busy: bool): # chrání aplikaci proti zběsilému klikání uživatele
+        self.is_busy = busy
+                
+        if busy:
+            self.ui.btn_load.setEnabled(False)
+            self.ui.btn_create.setEnabled(False)
+            self.ui.btn_rebuffer.setEnabled(False)
+            self.ui.btn_reset.setEnabled(False)
+            self.ui.btn_exit.setEnabled(False)
+        else:
+            self.ui.btn_load.setEnabled(True)
+            self.ui.btn_exit.setEnabled(True)
+            self.ui.btn_create.setEnabled(bool(self.films and self.category_rules))
+            self.ui.btn_rebuffer.setEnabled(bool(self.phase1_layout))
+            self.ui.btn_reset.setEnabled(bool(self.phase1_layout))
+                
+    def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavře se
         if getattr(self, "is_busy", False):
             QMessageBox.warning(self, "Probíhá výpočet", "Aplikaci nelze zavřít, dokud probíhá načítání nebo výpočet.\nProsím, vyčkejte na dokončení.")
             event.ignore()
         else:
             super().closeEvent(event)
+            
+    def _on_phase2_finished(self, layout_result):
+        self.statusBar().clearMessage()
+        self.current_layout = layout_result
+        if self.current_layout is None: return
+        if self.table_model:
+            self.table_model.update_data(self.current_layout.result_table)
+        self.statusBar().showMessage(self.current_layout.message, 5000)
+                
+    def _on_worker_error(self, error_msg):
+        self.statusBar().clearMessage()
+        QMessageBox.critical(self, "Chyba", error_msg)
+        self.statusBar().showMessage("Operace selhala.", 5000)
+        
+    def _on_phase1_finished(self, layout_result): 
+        self.statusBar().clearMessage()
+        self.current_layout = layout_result
+        self.phase1_layout = copy.deepcopy(self.current_layout) # Tvrdá záloha čistého výsledku pomocí (zabrání problémům se sdílenou pamětí)
+        if self.current_layout is None: return
+        if self.table_model:
+            self.table_model.update_data(self.current_layout.result_table)
+        final_message = self.current_layout.message
+        if self.current_layout.unassigned_films:
+            unassigned_count = len(self.current_layout.unassigned_films)
+            titles = ", ".join([film.title for film, _ in self.current_layout.unassigned_films])
+            final_message += f" | Nezařazeno ({unassigned_count}): {titles}"
+        self.statusBar().showMessage(final_message, 8000)
+        
+    def _cleanup_worker(self): # Vrací UI zpět do normálu po doběhnutí jakéhokoliv vlákna
+        QApplication.restoreOverrideCursor()
+        self.set_ui_busy(False)
+        self.worker = None
+            
+    def _on_load_finished(self, valid_films, category_rules, ignored_films): # Spustí se, až LoaderWorker přečte Excel
+        self.statusBar().clearMessage()
+        self.films = valid_films
+        self.category_rules = category_rules
+        self.current_layout = None
+        self.phase1_layout = None
+        headers = [rule.name for rule in self.category_rules]
+        empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
+        self.table_model = FilmTableModel(empty_table, headers)
+        self.ui.tableView.setModel(self.table_model)
+        self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.ui.tableView.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.statusBar().showMessage("Databáze úspěšně načtena.", 5000)
+        
+        if ignored_films:
+            QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
+            
+    def _apply_menu_state(self):
+        buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]
+                
+        if self.is_menu_expanded:
+            new_width = 200
+            self.is_menu_expanded = True
+            self.ui.frame.setStyleSheet(self.STYLE_EXPANDED)
+            for btn in buttons:
+                btn.setIconSize(QSize(20, 20))
+            self.ui.btn_menu.setIcon(qta.icon('fa5s.chevron-left', color='white'))
+            self.ui.btn_menu.setText("  Skrýt menu")
+            self.ui.btn_exit.setText("  Zavřít aplikaci")
+            self.ui.btn_create.show()
+            self.ui.btn_load.show()
+            self.ui.btn_rebuffer.show()
+            self.ui.btn_reset.show()
+        else:
+            new_width = 50
+            self.is_menu_expanded = False
+            self.ui.frame.setStyleSheet(self.STYLE_COLLAPSED)
+            for btn in buttons:
+                btn.setIconSize(QSize(30, 30))
+            self.ui.btn_menu.setIcon(qta.icon('fa5s.bars', color='white'))
+            self.ui.btn_menu.setText("")
+            self.ui.btn_exit.setText("")
+            self.ui.btn_create.hide()
+            self.ui.btn_load.hide()
+            self.ui.btn_rebuffer.hide()
+            self.ui.btn_reset.hide()
+                
+        self.ui.frame.setMinimumWidth(new_width)
+        self.ui.frame.setMaximumWidth(new_width)
