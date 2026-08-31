@@ -2,7 +2,7 @@ import data_types as dt
 import networkx as nx
 import random
 
-MIN_SPACING = 3
+MIN_SPACING = 4
 
 def _build_flow_graph(films: list[dt.Film], category_rules: list[dt.CategoryRule], capacities: dict[str, int], film_to_col: dict | None = None, spacing: int = 0) -> nx.DiGraph:
     if film_to_col is None:
