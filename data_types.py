@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-@dataclass(frozen=True) #díky dekorátoru není třeba psát __init__ protože si to python vytvoří sám na pozadí, frozen zaručuje, že objekt po vytvoří nelze nijak měnit
+@dataclass(frozen=True) #díky dekorátoru není třeba psát __init__ protože si to python vytvoří sám na pozadí, frozen zaručuje, že objekt po vytvoření nelze nijak měnit
 class Film:
     id: int
     title: str

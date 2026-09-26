@@ -63,6 +63,11 @@ class Ui_MainWindow(object):
         self.btn_reset.setObjectName(u"btn_reset")
 
         self.verticalLayout.addWidget(self.btn_reset)
+        
+        self.btn_send = QPushButton(self.frame)
+        self.btn_send.setObjectName(u"btn_send")
+        
+        self.verticalLayout.addWidget(self.btn_send)
 
         self.verticalSpacer = QSpacerItem(20, 384, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
 
@@ -75,11 +80,24 @@ class Ui_MainWindow(object):
 
 
         self.horizontalLayout_2.addWidget(self.frame)
+        
+        self.verticalLayout_right = QVBoxLayout()
+        self.verticalLayout_right.setSpacing(0)
+        self.verticalLayout_right.setContentsMargins(0, 0, 0, 0)
+
+        self.checkbox_container = QWidget(self.centralwidget)
+        self.checkbox_container.setMinimumHeight(35)
+        self.checkbox_layout = QHBoxLayout(self.checkbox_container)
+        self.checkbox_layout.setContentsMargins(0, 0, 0, 0)
+        self.checkbox_layout.setSpacing(0)
+
+        self.verticalLayout_right.addWidget(self.checkbox_container)
 
         self.tableView = QTableView(self.centralwidget)
         self.tableView.setObjectName(u"tableView")
-
-        self.horizontalLayout_2.addWidget(self.tableView)
+        
+        self.verticalLayout_right.addWidget(self.tableView)
+        self.horizontalLayout_2.addLayout(self.verticalLayout_right)
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
@@ -101,6 +119,7 @@ class Ui_MainWindow(object):
         self.btn_create.setText(QCoreApplication.translate("MainWindow", u"  Doplnit unik\u00e1tn\u00ed filmy", None))
         self.btn_rebuffer.setText(QCoreApplication.translate("MainWindow", u"  Doplnit pr\U000000e1zdn\U000000e1 m\U000000edsta", None))
         self.btn_reset.setText(QCoreApplication.translate("MainWindow", u"  Reset", None))
+        self.btn_send.setText(QCoreApplication.translate("MainWindow", u"  Odeslat do CMS", None))
         self.btn_exit.setText(QCoreApplication.translate("MainWindow", u"", None))
     # retranslateUi
 

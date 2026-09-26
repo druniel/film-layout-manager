@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog, QCheckBox, QWidget, QHBoxLayout
 from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel, QThread, Signal
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
@@ -6,8 +6,6 @@ from pathlib import Path
 import sys
 import copy
 import data_types as dt
-import loader
-import builder
 from ui_main import Ui_MainWindow
 
 def get_resource_path(relative_path: str) -> str: 
@@ -27,6 +25,7 @@ class LoaderWorker(QThread):
         
     def run(self):
         try:
+            import loader
             valid_films, category_rules, ignored_films = loader.load_database(self.file_path)
             self.finished_signal.emit(valid_films, category_rules, ignored_films)
         except Exception as e:
@@ -45,6 +44,7 @@ class BuilderWorker(QThread):
         
     def run(self):
         try:
+            import builder
             if self.phase == 1:
                 result = builder.generate_layout(self.films, self.category_rules)
             else:
@@ -119,6 +119,7 @@ class MainWindow(QMainWindow):
         self.ui.btn_create.setIcon(qta.icon('fa5s.star', color='white', color_disabled='gray'))
         self.ui.btn_rebuffer.setIcon(qta.icon('fa5s.puzzle-piece', color='white', color_disabled='gray'))
         self.ui.btn_reset.setIcon(qta.icon('fa5s.sync-alt', color='white', color_disabled='gray'))
+        self.ui.btn_send.setIcon(qta.icon('fa5s.cloud-upload-alt', color='white', color_disabled='gray'))
         self.ui.btn_exit.setIcon(qta.icon('fa5s.times', color='white'))
         self.ui.tableView.setStyleSheet("QHeaderView::section {font-weight: bold; font-size: 14px;}")
         self.ui.tableView.setWordWrap(True)
@@ -232,6 +233,7 @@ class MainWindow(QMainWindow):
             self.ui.btn_create.setEnabled(False)
             self.ui.btn_rebuffer.setEnabled(False)
             self.ui.btn_reset.setEnabled(False)
+            self.ui.btn_send.setEnabled(False)
             self.ui.btn_exit.setEnabled(False)
         else:
             self.ui.btn_load.setEnabled(True)
@@ -239,6 +241,7 @@ class MainWindow(QMainWindow):
             self.ui.btn_create.setEnabled(bool(self.films and self.category_rules))
             self.ui.btn_rebuffer.setEnabled(bool(self.phase1_layout))
             self.ui.btn_reset.setEnabled(bool(self.phase1_layout))
+            self.ui.btn_send.setEnabled(bool(self.phase1_layout))
                 
     def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavře se
         if getattr(self, "is_busy", False):
@@ -287,6 +290,21 @@ class MainWindow(QMainWindow):
         self.phase1_layout = None
         headers = [rule.name for rule in self.category_rules]
         empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
+        
+        while self.ui.checkbox_layout.count():
+            item = self.ui.checkbox_layout.takeAt(0)
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+
+        self.column_checkboxes = []
+
+        for rule in self.category_rules:
+            checkbox = QCheckBox()
+            self.ui.checkbox_layout.addWidget(checkbox, 1, Qt.AlignmentFlag.AlignCenter)
+            self.column_checkboxes.append(checkbox)
+            
         self.table_model = FilmTableModel(empty_table, headers)
         self.ui.tableView.setModel(self.table_model)
         self.ui.tableView.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -297,7 +315,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
             
     def _apply_menu_state(self):
-        buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_exit]
+        buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_send, self.ui.btn_exit]
                 
         if self.is_menu_expanded:
             new_width = 200
@@ -312,6 +330,7 @@ class MainWindow(QMainWindow):
             self.ui.btn_load.show()
             self.ui.btn_rebuffer.show()
             self.ui.btn_reset.show()
+            self.ui.btn_send.show()
         else:
             new_width = 50
             self.is_menu_expanded = False
@@ -325,6 +344,7 @@ class MainWindow(QMainWindow):
             self.ui.btn_load.hide()
             self.ui.btn_rebuffer.hide()
             self.ui.btn_reset.hide()
+            self.ui.btn_send.hide()
                 
         self.ui.frame.setMinimumWidth(new_width)
         self.ui.frame.setMaximumWidth(new_width)
