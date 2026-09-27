@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog, QCheckBox, QWidget, QHBoxLayout
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog, QCheckBox, QDialog, QVBoxLayout, QFormLayout, QComboBox, QPushButton, QLineEdit
 from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel, QThread, Signal
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
@@ -89,6 +89,34 @@ class FilmTableModel(QAbstractTableModel): # PŘEKLADATEL propojující surová 
         self._data = new_data
         self.endResetModel()
         
+class CMSDialog(QDialog):
+    def __init__(self, parent = None):
+        super().__init__(parent)
+        self.setWindowTitle("Odeslat do CMS")
+        self.setMinimumWidth(350)
+        layout = QVBoxLayout(self)
+        form_layout = QFormLayout()
+        self.combo_homepage = QComboBox()
+        self.combo_homepage.addItems(["cz", "sk"])
+        self.input_token = QLineEdit()
+        self.input_token.setPlaceholderText("Vložte Access token...")
+        # self.input_token.setEchoMode(QLineEdit.EchoMode.Password) skryje token
+        form_layout.addRow("Homepage:", self.combo_homepage)
+        form_layout.addRow("Access token:", self.input_token)
+        self.btn_submit = QPushButton("Odeslat")
+        self.btn_submit.clicked.connect(self.validate_and_submit)
+        layout.addLayout(form_layout)
+        layout.addWidget(self.btn_submit)
+        
+    def validate_and_submit(self):
+        if not self.input_token.text().strip():
+            QMessageBox.warning(self, "Chyba", "Vložte nový Access token.")
+            return
+        self.accept()
+        
+    def get_data(self):
+        return self.combo_homepage.currentText(), self.input_token.text()
+        
 
 class MainWindow(QMainWindow):
     STYLE_COLLAPSED = """
@@ -128,6 +156,7 @@ class MainWindow(QMainWindow):
         self.ui.btn_create.clicked.connect(self.create_unique_films)
         self.ui.btn_rebuffer.clicked.connect(self.fill_from_rebuffer)
         self.ui.btn_reset.clicked.connect(self.reset_table)
+        self.ui.btn_send.clicked.connect(self.send_to_cms)
         self.ui.btn_exit.clicked.connect(self.close)
         self.shortcut_search = QShortcut(QKeySequence("Ctrl+F"), self)
         self.shortcut_search.activated.connect(self.search_film)
@@ -195,6 +224,23 @@ class MainWindow(QMainWindow):
             self.table_model.update_data(empty_table)
             self.set_ui_busy(False)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
+    
+    def send_to_cms(self):
+        if self.is_busy: return
+        if not self.phase1_layout or not self.current_layout:
+            QMessageBox.warning(self, "Chyba", "Nejprve musíte vygenerovat rozvržení.")
+            return
+        
+        selected_indices = [i for i, checkbox in enumerate(self.column_checkboxes) if checkbox.isChecked()]
+        if not selected_indices:
+            QMessageBox.warning(self, "Chyba", "Nejprve vyberte alespoň jednu kategorii pro odeslání.")
+            return
+        
+        dialog = CMSDialog(self)
+        if dialog.exec():
+            homepage, token = dialog.get_data()
+            selected_rules = [self.category_rules[i] for i in selected_indices]
+            self.statusBar().showMessage(f"Odesílám tento počet sekcí: {len(selected_rules)} na '{homepage}' homepage...", 5000)
             
     def search_film(self):
         if not self.table_model or not self.current_layout or not self.current_layout.used_films:
