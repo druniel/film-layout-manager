@@ -98,10 +98,13 @@ class CMSDialog(QDialog):
         form_layout = QFormLayout()
         self.combo_homepage = QComboBox()
         self.combo_homepage.addItems(["cz", "sk"])
+        self.api_url = QLineEdit()
+        self.api_url.setPlaceholderText("Vložte URL API...")
         self.input_token = QLineEdit()
         self.input_token.setPlaceholderText("Vložte Access token...")
         # self.input_token.setEchoMode(QLineEdit.EchoMode.Password) skryje token
         form_layout.addRow("Homepage:", self.combo_homepage)
+        form_layout.addRow("API:", self.api_url)
         form_layout.addRow("Access token:", self.input_token)
         self.btn_submit = QPushButton("Odeslat")
         self.btn_submit.clicked.connect(self.validate_and_submit)
@@ -109,15 +112,14 @@ class CMSDialog(QDialog):
         layout.addWidget(self.btn_submit)
         
     def validate_and_submit(self):
-        if not self.input_token.text().strip():
-            QMessageBox.warning(self, "Chyba", "Vložte nový Access token.")
+        if not self.api_url.text().strip() or not self.input_token.text().strip():
+            QMessageBox.warning(self, "Chyba", "Chybí URL API nebo Access token.")
             return
         self.accept()
         
     def get_data(self):
-        return self.combo_homepage.currentText(), self.input_token.text()
+        return self.combo_homepage.currentText(), self.api_url.text(), self.input_token.text()
         
-
 class MainWindow(QMainWindow):
     STYLE_COLLAPSED = """
         QPushButton {background-color: transparent; border: none; color: white; text-align: center; padding: 8px;} 
@@ -134,6 +136,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.films: list[dt.Film] = []
         self.category_rules: list[dt.CategoryRule] = []
+        self.column_checkboxes = []
         self.current_layout: dt.LayoutResult | None = None
         self.phase1_layout: dt.LayoutResult | None = None
         self.worker: QThread | None = None
@@ -219,6 +222,9 @@ class MainWindow(QMainWindow):
         self.current_layout = None
         self.phase1_layout = None
         
+        for cb in self.column_checkboxes:
+            cb.setChecked(False)
+        
         if self.table_model and self.category_rules:
             empty_table = [["" for _ in range(len(self.category_rules))] for _ in range(10)]
             self.table_model.update_data(empty_table)
@@ -238,9 +244,9 @@ class MainWindow(QMainWindow):
         
         dialog = CMSDialog(self)
         if dialog.exec():
-            homepage, token = dialog.get_data()
+            homepage, api_url, token = dialog.get_data()
             selected_rules = [self.category_rules[i] for i in selected_indices]
-            self.statusBar().showMessage(f"Odesílám tento počet sekcí: {len(selected_rules)} na '{homepage}' homepage...", 5000)
+            self.statusBar().showMessage(f"Na '{homepage}' homepage odesílám tento počet sekcí: {len(selected_rules)}...", 5000)
             
     def search_film(self):
         if not self.table_model or not self.current_layout or not self.current_layout.used_films:
@@ -337,14 +343,9 @@ class MainWindow(QMainWindow):
         headers = [rule.name for rule in self.category_rules]
         empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
         
-        while self.ui.checkbox_layout.count():
-            item = self.ui.checkbox_layout.takeAt(0)
-            if item is not None:
-                widget = item.widget()
-                if widget is not None:
-                    widget.deleteLater()
-
-        self.column_checkboxes = []
+        for cb in self.column_checkboxes:
+            cb.deleteLater()
+        self.column_checkboxes.clear()
 
         for rule in self.category_rules:
             checkbox = QCheckBox()
