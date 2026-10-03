@@ -12,7 +12,6 @@ class DATA_BLOB(ctypes.Structure):
 
 crypt32 = ctypes.windll.crypt32
 
-
 crypt32.CryptProtectData.argtypes = [
     ctypes.POINTER(DATA_BLOB),
     wintypes.LPCWSTR,
