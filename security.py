@@ -24,7 +24,7 @@ crypt32.CryptProtectData.argtypes = [
 crypt32.CryptProtectData.restype = wintypes.BOOL
 
 def encrypt_data(data_dict: dict) -> bytes:
-    json_bytes = json.dumps(data_dict).encode('utf-8') # 1. adresa a token v dict převedeny na JSON a následně na surové bajty
+    json_bytes = json.dumps(data_dict).encode('utf-8') # adresa a token v dict převedeny na JSON a následně na surové bajty
     input_blob = DATA_BLOB()
     input_blob.cbData = len(json_bytes)
     input_blob.pbData = ctypes.cast(ctypes.c_char_p(json_bytes), ctypes.POINTER(ctypes.c_byte))

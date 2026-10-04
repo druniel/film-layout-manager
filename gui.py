@@ -1,93 +1,14 @@
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog, QCheckBox, QDialog, QVBoxLayout, QFormLayout, QComboBox, QPushButton, QLineEdit
-from PySide6.QtCore import QAbstractTableModel, Qt, QSize, QItemSelectionModel, QThread, Signal
+from PySide6.QtCore import Qt, QSize, QItemSelectionModel, QThread
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
-from pathlib import Path
-import sys
 import copy
 import data_types as dt
 from ui_main import Ui_MainWindow
-
-def get_resource_path(relative_path: str) -> str: 
-    if hasattr(sys, '_MEIPASS'): # ptá se, jestli běží jako sbalené exe, pokud jo ta v sys._mespass leží cesta např. ke složce img kterou si vytvořil windows při spuštění; pokud ne tak ji hledá v normální složce img
-        base_path = Path(getattr(sys, '_MEIPASS'))
-    else:
-        base_path = Path(__file__).resolve().parent
-    return (base_path / relative_path).as_posix()
-
-class LoaderWorker(QThread):
-    finished_signal = Signal(list, list, list) # vrací: valid_films, category_rules, ignored_films
-    error_signal = Signal(str)
-    
-    def __init__(self, file_path):
-        super().__init__()
-        self.file_path = file_path
-        
-    def run(self):
-        try:
-            import loader
-            valid_films, category_rules, ignored_films = loader.load_database(self.file_path)
-            self.finished_signal.emit(valid_films, category_rules, ignored_films)
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-class BuilderWorker(QThread):
-    finished_signal = Signal(object) # vrací hotový dt.LayoutResult
-    error_signal = Signal(str)
-    
-    def __init__(self, phase: int, films: list[dt.Film], category_rules: list[dt.CategoryRule], layout_backup: dt.LayoutResult | None = None):
-        super().__init__()
-        self.phase = phase
-        self.films = films
-        self.category_rules = category_rules
-        self.layout_backup = layout_backup # Záloha tabulky potřebná pro Fázi 2
-        
-    def run(self):
-        try:
-            import builder
-            if self.phase == 1:
-                result = builder.generate_layout(self.films, self.category_rules)
-            else:
-                if self.layout_backup is None:
-                    raise ValueError("Kritická chyba: Chybí záloha rozvržení pro doplňování rebufferu.")
-                result = builder.refill_empty_slots(self.layout_backup, self.films, self.category_rules)
-            self.finished_signal.emit(result)
-        except Exception as e:
-            self.error_signal.emit(str(e))
-
-class FilmTableModel(QAbstractTableModel): # PŘEKLADATEL propojující surová data s vizuální tabulkou
-    def __init__(self, data, headers):
-        super().__init__()
-        self._data = data
-        self._headers = headers
-        
-    def rowCount(self, parent = None):
-        return len(self._data)
-    
-    def columnCount(self,parent = None):
-        return len(self._headers)
-    
-    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole): # při volání funkce bez specifikování toho, co chci, automaticky přepodkládá, že chci displayrole
-        if not index.isValid():
-            return None
-        if role == Qt.ItemDataRole.DisplayRole:
-            return self._data[index.row()][index.column()]
-        if role == Qt.ItemDataRole.TextAlignmentRole:
-            return Qt.AlignmentFlag.AlignCenter
-        return None
-    
-    def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
-            cat_name = str(self._headers[section])
-            return cat_name.replace(" ", "\n")
-        if role == Qt.ItemDataRole.TextAlignmentRole:
-            return Qt.AlignmentFlag.AlignCenter
-        return None
-    
-    def update_data(self, new_data):
-        self.beginResetModel()
-        self._data = new_data
-        self.endResetModel()
+from security import save_credentials, load_credentials
+from workers import LoaderWorker, BuilderWorker
+from models import FilmTableModel
+from utils import get_resource_path
         
 class CMSDialog(QDialog):
     def __init__(self, parent = None):
@@ -107,6 +28,13 @@ class CMSDialog(QDialog):
         form_layout.addRow("API:", self.api_url)
         form_layout.addRow("Access token:", self.input_token)
         self.btn_submit = QPushButton("Odeslat")
+        self.saved_credentials = load_credentials()
+        
+        if self.saved_credentials:
+            self.api_url.setText(self.saved_credentials.get("api_url", ""))
+            self.input_token.setText(self.saved_credentials.get("token", ""))
+            
+        self.api_url.textEdited.connect(self.input_token.clear)
         self.btn_submit.clicked.connect(self.validate_and_submit)
         layout.addLayout(form_layout)
         layout.addWidget(self.btn_submit)
