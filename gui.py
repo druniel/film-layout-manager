@@ -9,6 +9,7 @@ from security import save_credentials, load_credentials
 from workers import LoaderWorker, BuilderWorker
 from models import FilmTableModel
 from utils import get_resource_path
+from api_client import ApiWorker
         
 class CMSDialog(QDialog):
     def __init__(self, parent = None):
@@ -173,8 +174,25 @@ class MainWindow(QMainWindow):
         dialog = CMSDialog(self)
         if dialog.exec():
             homepage, api_url, token = dialog.get_data()
-            selected_rules = [self.category_rules[i] for i in selected_indices]
-            self.statusBar().showMessage(f"Na '{homepage}' homepage odesílám tento počet sekcí: {len(selected_rules)}...", 5000)
+            
+            payload = {}
+            for col_index in selected_indices:
+                category_name = self.category_rules[col_index].name
+                film_ids = []
+                for row in self.current_layout.id_table:
+                    film_id = row[col_index]
+                    if film_id is not None:
+                        film_ids.append(film_id)
+                payload[category_name] = film_ids
+            
+            self.statusBar().showMessage(f"Připojuji se k API a odesílám {len(selected_indices)} sekcí...", 5000)
+            self.set_ui_busy(True)
+            self.worker = ApiWorker(api_url, token, homepage, payload)
+            self.worker.success.connect(self._on_api_success)
+            self.worker.error.connect(self._on_worker_error)
+            self.worker.finished.connect(self._cleanup_worker)
+            self.worker.finished.connect(self.worker.deleteLater)
+            self.worker.start()
             
     def search_film(self):
         if not self.table_model or not self.current_layout or not self.current_layout.used_films:
@@ -288,6 +306,14 @@ class MainWindow(QMainWindow):
         
         if ignored_films:
             QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
+            
+    def _on_api_success(self, message):
+        self.statusBar().clearMessage()
+        QMessageBox.information(self, "Hotovo", message)
+        dialog = self.findChild(CMSDialog)
+        if dialog:
+            homepage, api_url, token = dialog.get_data()
+            save_credentials(api_url, token)
             
     def _apply_menu_state(self):
         buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_send, self.ui.btn_exit]
