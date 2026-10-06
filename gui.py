@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         self.is_busy = False
         self.table_model = None
         self.ui = Ui_MainWindow()
+        self.recovery_state = None
         self.ui.setupUi(self) # načte design z ui_main.py
         self.setWindowTitle("Filmana generátor rozvržení filmů")
         self.ui.btn_menu.setIcon(qta.icon('fa5s.bars', color='white'))
@@ -171,6 +172,17 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Chyba", "Nejprve vyberte alespoň jednu kategorii pro odeslání.")
             return
         
+        missing_ids = 0
+        for col_index in selected_indices:
+            for row_index, row_id in enumerate(self.current_layout.id_table):
+                if self.current_layout.result_table[row_index][col_index] and row_id[col_index] is None:
+                    missing_ids += 1
+        
+        if missing_ids > 0:
+            message = QMessageBox.warning(self, "Varování", f"Ve vybraných sloupcích se nachází {missing_ids} filmů bez ID.\nTyto filmy budou při odeslání do CMS ignorovány.\n\nChcete přesto pokračovat?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if message == QMessageBox.StandardButton.No:
+                return
+        
         dialog = CMSDialog(self)
         if dialog.exec():
             homepage, api_url, token = dialog.get_data()
@@ -187,9 +199,10 @@ class MainWindow(QMainWindow):
             
             self.statusBar().showMessage(f"Připojuji se k API a odesílám {len(selected_indices)} sekcí...", 5000)
             self.set_ui_busy(True)
-            self.worker = ApiWorker(api_url, token, homepage, payload)
+            self.worker = ApiWorker(api_url, token, homepage, payload, recovery_state = self.recovery_state)
             self.worker.success.connect(self._on_api_success)
             self.worker.error.connect(self._on_worker_error)
+            self.worker.token_expired.connect(self._on_token_expired)
             self.worker.finished.connect(self._cleanup_worker)
             self.worker.finished.connect(self.worker.deleteLater)
             self.worker.start()
@@ -256,9 +269,11 @@ class MainWindow(QMainWindow):
             self.table_model.update_data(self.current_layout.result_table)
         self.statusBar().showMessage(self.current_layout.message, 5000)
                 
-    def _on_worker_error(self, error_msg):
+    def _on_worker_error(self, error_msg, state):
+        self.recovery_state = state
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Chyba", error_msg)
+        self.set_ui_busy(False)
         self.statusBar().showMessage("Operace selhala.", 5000)
         
     def _on_phase1_finished(self, layout_result): 
@@ -308,12 +323,24 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Ignorované filmy", "Některé řádky byly ignorovány kvůli chybám:\n\n" + "\n".join(ignored_films))
             
     def _on_api_success(self, message):
+        self.recovery_state = None
         self.statusBar().clearMessage()
         QMessageBox.information(self, "Hotovo", message)
         dialog = self.findChild(CMSDialog)
         if dialog:
             homepage, api_url, token = dialog.get_data()
             save_credentials(api_url, token)
+            
+    def _on_token_expired(self):
+        self.statusBar().clearMessage()
+        self.set_ui_busy(False)
+        QMessageBox.warning(self, "Token vypršel", "Access token vypršel, zadejte nový.")
+        dialog = CMSDialog(self)
+        saved_url, _ = load_credentials()
+        if saved_url:
+            dialog.api_url.setText(saved_url)
+        if dialog.exec():
+            self.send_to_cms()
             
     def _apply_menu_state(self):
         buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_send, self.ui.btn_exit]
