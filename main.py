@@ -2,7 +2,8 @@ import sys
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 import qdarktheme
-from gui import MainWindow, get_resource_path
+from gui import MainWindow
+from utils import get_resource_path
 
 def main():
     app = QApplication(sys.argv)

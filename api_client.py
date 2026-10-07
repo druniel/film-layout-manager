@@ -2,6 +2,7 @@ import time
 import requests
 from requests.exceptions import HTTPError, Timeout, RequestException
 from PySide6.QtCore import QThread, Signal
+import json
 
 class ApiWorker(QThread):
     success = Signal(str)
@@ -106,7 +107,15 @@ class ApiWorker(QThread):
                     section_detail = self._make_request("GET", f"/admin/sections/{section_id}")
                     if section_detail is None: return
                     custom_names_list = [{"id": i["play_id"], "name": custom_name} for i in section_detail.get("items", []) for custom_name in i.get("custom_names", [])]
-                    update_payload = {"custom_names": custom_names_list, "landing_page": section_detail.get("landing_page", False), "names": section_detail.get("names", []), "plays": self.payload[section_name]}
+                    plays_list = self.payload[section_name]
+                    if not all(isinstance(film_id, int) for film_id in plays_list):
+                        raise Exception(f"Kritická chyba: Do sekce '{section_name}' se snažíte odeslat nečíselné ID.")
+                    if len(plays_list) != len(set(plays_list)):
+                        raise Exception(f"Kritická chyba: Do sekce '{section_name}' se snažíte odeslat duplicitní ID.")
+                    update_payload = {"custom_names": custom_names_list, "landing_page": section_detail.get("landing_page", False), "names": section_detail.get("names", []), "plays": plays_list}
+                    print(f"\n--- ODESÍLÁM PAYLOAD PRO SEKCI: {section_name} (ID: {section_id}) ---")
+                    print(json.dumps(update_payload, indent=2, ensure_ascii=False))
+                    print("---------------------------------------------------\n")
                     self._make_request("PUT", f"/admin/sections/{section['id']}", json = update_payload)
                     self.state["completed_sections"].append(section_id)
                     

@@ -27,10 +27,10 @@ def _build_flow_graph(films: list[dt.Film], category_rules: list[dt.CategoryRule
         G.add_node(movie_node)
         
         match film.priority: #čím menší váha, tím raději algoritmus film použije
-            case 1: weight = -100000 
-            case 2: weight = -10000
-            case 3: weight = -1000
-            case _: weight = -100
+            case 1: weight = -1000000000
+            case 2: weight = -1000000
+            case 3: weight = -10000
+            case _: weight = -10
             
         G.add_edge("S", movie_node, capacity=1, weight=weight) #propojení uzlu zdroje > s uzlem filmu; kapacita = ze zdroje do uzlu film může jít logicky jen 1 film
         original_columns = film_to_col.get(film.id, []) # ve kterých sloupcích (čísla) už tento konkrétní film leží (pro Fázi 2)

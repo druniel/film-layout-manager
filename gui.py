@@ -8,8 +8,8 @@ from ui_main import Ui_MainWindow
 from security import save_credentials, load_credentials
 from workers import LoaderWorker, BuilderWorker
 from models import FilmTableModel
-from utils import get_resource_path
 from api_client import ApiWorker
+import unicodedata
         
 class CMSDialog(QDialog):
     def __init__(self, parent = None):
@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self.recovery_state = None
         self.ui.setupUi(self) # načte design z ui_main.py
         self.setWindowTitle("Filmana generátor rozvržení filmů")
+        self.ui.tableView.verticalHeader().setVisible(False)
         self.ui.btn_menu.setIcon(qta.icon('fa5s.bars', color='white'))
         self.ui.btn_load.setIcon(qta.icon('fa5s.folder-open', color='white'))
         self.ui.btn_create.setIcon(qta.icon('fa5s.star', color='white', color_disabled='gray'))
@@ -199,7 +200,7 @@ class MainWindow(QMainWindow):
             
             self.statusBar().showMessage(f"Připojuji se k API a odesílám {len(selected_indices)} sekcí...", 5000)
             self.set_ui_busy(True)
-            self.worker = ApiWorker(api_url, token, homepage, payload, recovery_state = self.recovery_state)
+            self.worker = ApiWorker(api_url, token, homepage, payload, self.recovery_state)
             self.worker.success.connect(self._on_api_success)
             self.worker.error.connect(self._on_worker_error)
             self.worker.token_expired.connect(self._on_token_expired)
@@ -215,7 +216,10 @@ class MainWindow(QMainWindow):
         text, ok = QInputDialog.getText(self, "Vyhledávání", "Zadejte název filmu:")
         
         if ok and text:
-            search_query = text.lower().strip()
+            def strip_accents(s):
+                return "".join(c for c in unicodedata.normalize("NFD", str(s)) if unicodedata.category(c) != "Mn")
+            
+            search_query = strip_accents(text.lower().strip())
             found = False
             self.ui.tableView.clearSelection()
             
@@ -224,8 +228,10 @@ class MainWindow(QMainWindow):
                     index = self.table_model.index(r, c)
                     cell_data = self.table_model.data(index)
                     
-                    if cell_data and search_query in str(cell_data).lower():
-                        self.ui.tableView.selectionModel().select(index, QItemSelectionModel.SelectionFlag.Select)
+                    if cell_data:
+                        clean_cell = strip_accents(str(cell_data).lower())
+                        if search_query in clean_cell:
+                            self.ui.tableView.selectionModel().select(index, QItemSelectionModel.SelectionFlag.Select)
                         
                         if not found:
                             self.ui.tableView.scrollTo(index)
