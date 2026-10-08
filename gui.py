@@ -71,6 +71,8 @@ class MainWindow(QMainWindow):
         self.worker: QThread | None = None
         self.is_busy = False
         self.table_model = None
+        self.current_api_url = None
+        self.current_token = None
         self.ui = Ui_MainWindow()
         self.recovery_state = None
         self.ui.setupUi(self) # načte design z ui_main.py
@@ -187,6 +189,8 @@ class MainWindow(QMainWindow):
         dialog = CMSDialog(self)
         if dialog.exec():
             homepage, api_url, token = dialog.get_data()
+            self.current_api_url = api_url
+            self.current_token = token
             
             payload = {}
             for col_index in selected_indices:
@@ -331,22 +335,17 @@ class MainWindow(QMainWindow):
     def _on_api_success(self, message):
         self.recovery_state = None
         self.statusBar().clearMessage()
+        if self.current_api_url and self.current_token:
+            save_credentials(self.current_api_url, self.current_token)
         QMessageBox.information(self, "Hotovo", message)
-        dialog = self.findChild(CMSDialog)
-        if dialog:
-            homepage, api_url, token = dialog.get_data()
-            save_credentials(api_url, token)
+        
             
     def _on_token_expired(self):
+        self.recovery_state = None
         self.statusBar().clearMessage()
         self.set_ui_busy(False)
         QMessageBox.warning(self, "Token vypršel", "Access token vypršel, zadejte nový.")
-        dialog = CMSDialog(self)
-        saved_url, _ = load_credentials()
-        if saved_url:
-            dialog.api_url.setText(saved_url)
-        if dialog.exec():
-            self.send_to_cms()
+        self.send_to_cms()
             
     def _apply_menu_state(self):
         buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_send, self.ui.btn_exit]

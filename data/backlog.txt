@@ -1,0 +1,20 @@
+-prvně zkusit na fast api, potom na dev api, potom produkční api
+-při kompilaci do exe vyhodit --onefile a následně vzniklou složku prohnat inno setup který vytvoří instalátor; anebo zkusit nástroj nuitka, který to přeloží do C a zkompiluje do strojového kodu = menší velikost a větší rychlost startu
+-autoupdate včetně odstranění původní instalace
+-zamknutí pozic
+-aktualizovat requirements a readme
+
+DEV links:
+web https://dev.filmana.cz/
+cms https://cms.dev.filmana.cz/
+api https://api.dev.filmana.cz/
+
+moje static IP: 
+88.96.54.19
+
+mock api token: mock-admin-token
+
+curl -X POST http://127.0.0.1:8000/__mock__/fail-next \
+     -H "Authorization: Bearer mock-control-token" \
+     -H "Content-Type: application/json" \
+     -d '{"method": "PUT", "path": "/admin/sections", "status_code": 503, "count": 2, "retry_after": 2}'

@@ -130,8 +130,8 @@ class ApiWorker(QThread):
                     uploaded_plays = [i["play_id"] for i in s.get("items", [])]
                     if uploaded_plays != self.payload[name]:
                         raise Exception(f"Ověření selhalo! Sekce '{name}' na serveru neodpovídá odeslaným datům.")
-                if s.get("id") not in self.state["completed_sections"]:
-                    raise Exception(f"Kritická chyba: Sekce '{s.get('name')}' nebyla aktualizována.")
+                    if s.get("id") not in self.state["completed_sections"]:
+                        raise Exception(f"Kritická chyba: Sekce '{s.get('name')}' nebyla aktualizována.")
             
             self.success.emit(f"Úspěšně aktualizováno.")
             
