@@ -102,17 +102,26 @@ class ApiWorker(QThread):
             for section in draft_data.get("sections", []):
                 section_name = section.get("name")
                 section_id = section.get("id")
+                is_landing_page = section.get("landing_page", False)
                 
                 if section_name in self.payload and section_id not in self.state["completed_sections"]:
                     section_detail = self._make_request("GET", f"/admin/sections/{section_id}")
                     if section_detail is None: return
-                    custom_names_list = [{"id": i["play_id"], "name": custom_name} for i in section_detail.get("items", []) for custom_name in i.get("custom_names", [])]
+                    hints_data = self._make_request("GET", f"/admin/sections/{section_id}/hints?limit=10000")
+                    if hints_data is None: return
+                    valid_ids = {item["id"] for item in hints_data}
                     plays_list = self.payload[section_name]
+                    
+                    for film_id in plays_list:
+                        if film_id not in valid_ids:
+                            raise Exception(f"Validace selhala u sekce '{section_name}': Film s ID {film_id} neexistuje, nebo do této kategorie žánrově nepatří. Zkontrolujte zdrojový Excel.")
+                    
+                    custom_names_list = [{"id": i["play_id"], "name": custom_name} for i in section_detail.get("items", []) for custom_name in i.get("custom_names", []) if i["play_id"] in plays_list]
                     if not all(isinstance(film_id, int) for film_id in plays_list):
                         raise Exception(f"Kritická chyba: Do sekce '{section_name}' se snažíte odeslat nečíselné ID.")
                     if len(plays_list) != len(set(plays_list)):
                         raise Exception(f"Kritická chyba: Do sekce '{section_name}' se snažíte odeslat duplicitní ID.")
-                    update_payload = {"custom_names": custom_names_list, "landing_page": section_detail.get("landing_page", False), "names": section_detail.get("names", []), "plays": plays_list}
+                    update_payload = {"custom_names": custom_names_list, "landing_page": is_landing_page, "names": section_detail.get("names", []), "plays": plays_list}
                     print(f"\n--- ODESÍLÁM PAYLOAD PRO SEKCI: {section_name} (ID: {section_id}) ---")
                     print(json.dumps(update_payload, indent=2, ensure_ascii=False))
                     print("---------------------------------------------------\n")

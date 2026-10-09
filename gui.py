@@ -18,14 +18,11 @@ class CMSDialog(QDialog):
         self.setMinimumWidth(350)
         layout = QVBoxLayout(self)
         form_layout = QFormLayout()
-        self.combo_homepage = QComboBox()
-        self.combo_homepage.addItems(["cz", "sk"])
         self.api_url = QLineEdit()
         self.api_url.setPlaceholderText("Vložte URL API...")
         self.input_token = QLineEdit()
         self.input_token.setPlaceholderText("Vložte Access token...")
         # self.input_token.setEchoMode(QLineEdit.EchoMode.Password) skryje token
-        form_layout.addRow("Homepage:", self.combo_homepage)
         form_layout.addRow("API:", self.api_url)
         form_layout.addRow("Access token:", self.input_token)
         self.btn_submit = QPushButton("Odeslat")
@@ -47,19 +44,33 @@ class CMSDialog(QDialog):
         self.accept()
         
     def get_data(self):
-        return self.combo_homepage.currentText(), self.api_url.text(), self.input_token.text()
+        return self.api_url.text(), self.input_token.text()
         
 class MainWindow(QMainWindow):
     STYLE_COLLAPSED = """
         QPushButton {background-color: transparent; border: none; color: white; text-align: center; padding: 8px;} 
-        QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 5px;}
+        QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 0px;}
         QPushButton:disabled {color: gray;}
     """
     STYLE_EXPANDED = """
         QPushButton {background-color: transparent; border: none; color: white; text-align: left; font-weight: bold; font-size: 14px; padding: 8px;} 
-        QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 5px;}
+        QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 0px;}
         QPushButton:disabled {color: gray;}
     """
+    STYLE_LANG_BTN_ACTIVE = """
+        QPushButton {background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-radius: 0px; padding: 10px 0px; text-align: center;}
+        QPushButton:disabled {background-color: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.3);}
+    """
+    STYLE_LANG_BTN_INACTIVE = """
+        QPushButton {background-color: transparent; color: white; font-weight: normal; border: none; padding: 10px 0px; text-align: center;}
+        QPushButton:hover {background-color: rgba(255, 255, 255, 0.1);}
+        QPushButton:disabled {color: rgba(255, 255, 255, 0.3);}
+    """
+    
+    STYLE_LANG_COLLAPSED = """
+            QPushButton {text-align: center; padding: 10px 0px; background-color: transparent; color: white; border: none; font-weight: bold;}
+            QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 0px;}
+        """
     
     def __init__(self):
         super().__init__()
@@ -68,11 +79,13 @@ class MainWindow(QMainWindow):
         self.column_checkboxes = []
         self.current_layout: dt.LayoutResult | None = None
         self.phase1_layout: dt.LayoutResult | None = None
+        self.region_layouts: dict[str, dt.LayoutResult | None] = {"cz": None, "sk": None}
         self.worker: QThread | None = None
         self.is_busy = False
         self.table_model = None
         self.current_api_url = None
         self.current_token = None
+        self.current_region = "cz"
         self.ui = Ui_MainWindow()
         self.recovery_state = None
         self.ui.setupUi(self) # načte design z ui_main.py
@@ -87,6 +100,10 @@ class MainWindow(QMainWindow):
         self.ui.btn_exit.setIcon(qta.icon('fa5s.times', color='white'))
         self.ui.tableView.setStyleSheet("QHeaderView::section {font-weight: bold; font-size: 14px;}")
         self.ui.tableView.setWordWrap(True)
+        self.ui.btn_cz.clicked.connect(lambda: self.switch_region("cz"))
+        self.ui.btn_sk.clicked.connect(lambda: self.switch_region("sk"))
+        self.ui.btn_lang_collapsed.clicked.connect(lambda: self.switch_region("sk" if self.current_region == "cz" else "cz"))
+        self.ui.btn_lang_collapsed.setStyleSheet(self.STYLE_LANG_COLLAPSED)
         self.ui.btn_menu.clicked.connect(self.toggle_menu)
         self.ui.btn_load.clicked.connect(self.load_database)
         self.ui.btn_create.clicked.connect(self.create_unique_films)
@@ -99,6 +116,40 @@ class MainWindow(QMainWindow):
         self.is_menu_expanded = False
         self._apply_menu_state()
         self.set_ui_busy(False) # povypíná tlačítka, protože zatím nemáme data
+        
+    def switch_region(self, new_region):
+        if self.is_busy or self.current_region == new_region:
+            return
+        
+        old_region = self.current_region
+        self.current_region = new_region
+        self._update_lang_buttons_style()
+        self.ui.btn_lang_collapsed.setText(new_region.upper())
+        self.statusBar().showMessage(f"Přepnuto na homepage: {new_region.upper()}", 5000)
+        
+        if self.current_layout:
+            self.region_layouts[old_region] = copy.deepcopy(self.current_layout)
+            
+        if self.region_layouts.get(new_region):
+            self.current_layout = copy.deepcopy(self.region_layouts[new_region])
+            self.phase1_layout = copy.deepcopy(self.current_layout)
+            if self.table_model and self.current_layout:
+                self.table_model.update_data(self.current_layout.result_table)
+            self.statusBar().showMessage(f"Obnoveno předchozí rozvržení pro {new_region.upper()}.", 5000)
+            return
+        
+        if self.films and self.category_rules and self.region_layouts.get(old_region):
+            valid_films = [f for f in self.films if new_region in f.region]
+            self.current_layout = self._smart_swap_layout(self.region_layouts[old_region], valid_films, new_region)
+            self.phase1_layout = copy.deepcopy(self.current_layout)
+            self.region_layouts[new_region] = copy.deepcopy(self.current_layout)
+            
+            if self.table_model and self.current_layout:
+                self.table_model.update_data(self.current_layout.result_table)
+            self.statusBar().showMessage("Upravuji tabulku pro nový region a doplňuji z rebufferu...")
+            
+        elif self.films and self.category_rules:
+                self.create_unique_films()
         
     def toggle_menu(self):
         self.is_menu_expanded = not self.is_menu_expanded
@@ -124,26 +175,42 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Upozornění", "Nejdříve načtěte data z Excelu.")
             return
         
+        for cb in self.column_checkboxes:
+            cb.setChecked(False)
+        
+        valid_films = [f for f in self.films if self.current_region in f.region]
         self.statusBar().showMessage("Algoritmus hledá optimální unikátní rozvržení...")
         self.set_ui_busy(True)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        self.worker = BuilderWorker(phase = 1, films = self.films, category_rules = self.category_rules)
+        self.worker = BuilderWorker(phase = 1, films = valid_films, category_rules = self.category_rules)
         self.worker.finished_signal.connect(self._on_phase1_finished)
         self.worker.error_signal.connect(self._on_worker_error)
         self.worker.finished.connect(self._cleanup_worker)
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
         
-    def fill_from_rebuffer(self):
+    def fill_from_rebuffer(self, custom_backup = None, is_smart_switch = False):
         if self.is_busy: return
-        if not self.phase1_layout:
+        
+        if isinstance(custom_backup, bool) or custom_backup is None:
+            backup_to_use = self.current_layout if self.current_layout else self.phase1_layout
+        else:
+            backup_to_use = custom_backup
+        
+        if not backup_to_use:
             QMessageBox.information(self, "Upozornění", "Doplňování lze spustit až po vytvoření unikátního rozvrhu.")
             return
-        self.statusBar().showMessage("Doplňuji prázdná místa z rebufferu...")
+        
+        valid_films = [f for f in self.films if self.current_region in f.region]
+        
+        if not is_smart_switch:
+            self.statusBar().showMessage("Doplňuji prázdná místa z rebufferu...")
+            
         self.set_ui_busy(True)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        safe_backup = copy.deepcopy(self.phase1_layout)
-        self.worker = BuilderWorker(phase = 2, films = self.films, category_rules = self.category_rules, layout_backup = safe_backup)
+        safe_backup = copy.deepcopy(backup_to_use)
+        self.worker = BuilderWorker(phase = 2, films = valid_films, category_rules = self.category_rules, layout_backup = safe_backup)
+        self.worker.is_smart_switch = is_smart_switch
         self.worker.finished_signal.connect(self._on_phase2_finished)
         self.worker.error_signal.connect(self._on_worker_error)
         self.worker.finished.connect(self._cleanup_worker)
@@ -154,6 +221,7 @@ class MainWindow(QMainWindow):
         if self.is_busy: return
         self.current_layout = None
         self.phase1_layout = None
+        self.region_layouts = {"cz": None, "sk": None}
         
         for cb in self.column_checkboxes:
             cb.setChecked(False)
@@ -163,6 +231,7 @@ class MainWindow(QMainWindow):
             self.table_model.update_data(empty_table)
             self.set_ui_busy(False)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
+        
     
     def send_to_cms(self):
         if self.is_busy: return
@@ -175,20 +244,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Chyba", "Nejprve vyberte alespoň jednu kategorii pro odeslání.")
             return
         
-        missing_ids = 0
-        for col_index in selected_indices:
-            for row_index, row_id in enumerate(self.current_layout.id_table):
-                if self.current_layout.result_table[row_index][col_index] and row_id[col_index] is None:
-                    missing_ids += 1
-        
-        if missing_ids > 0:
-            message = QMessageBox.warning(self, "Varování", f"Ve vybraných sloupcích se nachází {missing_ids} filmů bez ID.\nTyto filmy budou při odeslání do CMS ignorovány.\n\nChcete přesto pokračovat?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if message == QMessageBox.StandardButton.No:
-                return
-        
         dialog = CMSDialog(self)
         if dialog.exec():
-            homepage, api_url, token = dialog.get_data()
+            api_url, token = dialog.get_data()
             self.current_api_url = api_url
             self.current_token = token
             
@@ -204,7 +262,7 @@ class MainWindow(QMainWindow):
             
             self.statusBar().showMessage(f"Připojuji se k API a odesílám {len(selected_indices)} sekcí...", 5000)
             self.set_ui_busy(True)
-            self.worker = ApiWorker(api_url, token, homepage, payload, self.recovery_state)
+            self.worker = ApiWorker(api_url, token, self.current_region, payload, self.recovery_state)
             self.worker.success.connect(self._on_api_success)
             self.worker.error.connect(self._on_worker_error)
             self.worker.token_expired.connect(self._on_token_expired)
@@ -256,6 +314,9 @@ class MainWindow(QMainWindow):
             self.ui.btn_reset.setEnabled(False)
             self.ui.btn_send.setEnabled(False)
             self.ui.btn_exit.setEnabled(False)
+            self.ui.btn_cz.setEnabled(False)
+            self.ui.btn_sk.setEnabled(False)
+            self.ui.btn_lang_collapsed.setEnabled(False)
         else:
             self.ui.btn_load.setEnabled(True)
             self.ui.btn_exit.setEnabled(True)
@@ -263,6 +324,9 @@ class MainWindow(QMainWindow):
             self.ui.btn_rebuffer.setEnabled(bool(self.phase1_layout))
             self.ui.btn_reset.setEnabled(bool(self.phase1_layout))
             self.ui.btn_send.setEnabled(bool(self.phase1_layout))
+            self.ui.btn_cz.setEnabled(True)
+            self.ui.btn_sk.setEnabled(True)
+            self.ui.btn_lang_collapsed.setEnabled(True)
                 
     def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavře se
         if getattr(self, "is_busy", False):
@@ -275,9 +339,13 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         self.current_layout = layout_result
         if self.current_layout is None: return
+        self.region_layouts[self.current_region] = copy.deepcopy(self.current_layout)
         if self.table_model:
             self.table_model.update_data(self.current_layout.result_table)
-        self.statusBar().showMessage(self.current_layout.message, 5000)
+        if getattr(self.worker, "is_smart_switch", False):
+            self.statusBar().showMessage(f"Tabulka byla úspěšně upravena pro {self.current_region.upper()}.", 5000)
+        else:
+            self.statusBar().showMessage(self.current_layout.message, 5000)
                 
     def _on_worker_error(self, error_msg, state):
         self.recovery_state = state
@@ -290,6 +358,9 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         self.current_layout = layout_result
         self.phase1_layout = copy.deepcopy(self.current_layout) # Tvrdá záloha čistého výsledku pomocí (zabrání problémům se sdílenou pamětí)
+        self.region_layouts[self.current_region] = copy.deepcopy(self.current_layout)
+        other_region = "sk" if self.current_region == "cz" else "cz"
+        self.region_layouts[other_region] = None
         if self.current_layout is None: return
         if self.table_model:
             self.table_model.update_data(self.current_layout.result_table)
@@ -311,6 +382,7 @@ class MainWindow(QMainWindow):
         self.category_rules = category_rules
         self.current_layout = None
         self.phase1_layout = None
+        self.region_layouts = {"cz": None, "sk": None}
         headers = [rule.name for rule in self.category_rules]
         empty_table = [["" for _ in range(len(headers))] for _ in range(10)]
         
@@ -364,6 +436,8 @@ class MainWindow(QMainWindow):
             self.ui.btn_rebuffer.show()
             self.ui.btn_reset.show()
             self.ui.btn_send.show()
+            self.ui.widget_lang_expanded.show()
+            self.ui.btn_lang_collapsed.hide()
         else:
             new_width = 50
             self.is_menu_expanded = False
@@ -378,6 +452,90 @@ class MainWindow(QMainWindow):
             self.ui.btn_rebuffer.hide()
             self.ui.btn_reset.hide()
             self.ui.btn_send.hide()
+            self.ui.widget_lang_expanded.hide()
+            self.ui.btn_lang_collapsed.show()
                 
         self.ui.frame.setMinimumWidth(new_width)
         self.ui.frame.setMaximumWidth(new_width)
+        self._update_lang_buttons_style()
+        
+    def _update_lang_buttons_style(self):
+        if self.current_region == "cz":
+            self.ui.btn_cz.setStyleSheet(self.STYLE_LANG_BTN_ACTIVE)
+            self.ui.btn_sk.setStyleSheet(self.STYLE_LANG_BTN_INACTIVE)
+        else:
+            self.ui.btn_cz.setStyleSheet(self.STYLE_LANG_BTN_INACTIVE)
+            self.ui.btn_sk.setStyleSheet(self.STYLE_LANG_BTN_ACTIVE)
+            
+    def _filter_layout_for_region(self, layout, valid_ids):
+        new_layout = copy.deepcopy(layout)
+        
+        for c_idx in range(len(self.category_rules)):
+            col_ids = []
+            col_titles = []
+            for r_idx in range(len(new_layout.id_table)):
+                f_id = new_layout.id_table[r_idx][c_idx]
+                f_title = new_layout.result_table[r_idx][c_idx]
+                if f_id is not None and f_id in valid_ids:
+                    col_ids.append(f_id)
+                    col_titles.append(f_title)
+            cat_name = self.category_rules[c_idx].name
+            new_layout.category_counts[cat_name] = len(col_ids)
+            
+            for r_idx in range(len(new_layout.id_table)):
+                if r_idx < len(col_ids):
+                    new_layout.id_table[r_idx][c_idx] = col_ids[r_idx]
+                    new_layout.result_table[r_idx][c_idx] = col_titles[r_idx]
+                else:
+                    new_layout.id_table[r_idx][c_idx] = None
+                    new_layout.result_table[r_idx][c_idx] = ""
+                    
+        new_layout.used_films = {f_id for row in new_layout.id_table for f_id in row if f_id is not None}
+        return new_layout
+    
+    def _smart_swap_layout(self, layout, valid_films, new_region):
+        new_layout = copy.deepcopy(layout)
+        valid_ids = {f.id for f in valid_films}
+        
+        for r_idx in range(len(new_layout.id_table)):
+            for c_idx in range(len(new_layout.id_table[r_idx])):
+                f_id = new_layout.id_table[r_idx][c_idx]
+                
+                if f_id is not None and f_id not in valid_ids:
+                    old_title = new_layout.result_table[r_idx][c_idx]
+                    
+                    old_title_lower = " ".join(old_title.lower().split())
+                    base_title = old_title_lower
+                    
+                    for suffix in [" cz", "-cz", " (cz)", " sk", "-sk", " (sk)"]:
+                        if base_title.endswith(suffix):
+                            base_title = base_title[:-len(suffix)].strip()
+   
+                            if base_title.endswith("-"):
+                                base_title = base_title[:-1].strip()
+                            break
+                            
+                    target_1 = f"{base_title} {new_region}"
+                    target_2 = f"{base_title} ({new_region})"
+                    target_3 = f"{base_title}-{new_region}"
+                    target_4 = f"{base_title} - {new_region}"
+                    
+                    replacement = None
+                    for f in valid_films:
+                        f_title_lower = " ".join(f.title.lower().split())
+                        if f_title_lower in [target_1, target_2, target_3, target_4]:
+                            replacement = f
+                            break
+                            
+                    if replacement:
+                        new_layout.id_table[r_idx][c_idx] = replacement.id
+                        new_layout.result_table[r_idx][c_idx] = replacement.title
+                        new_layout.used_films.add(replacement.id)
+                    else:
+                        new_layout.id_table[r_idx][c_idx] = None
+                        new_layout.result_table[r_idx][c_idx] = ""
+                        cat_name = self.category_rules[c_idx].name
+                        new_layout.category_counts[cat_name] -= 1
+                        
+        new_layout.used_films = {f_id for row in new_layout.id_table for f_id in row if f_id is not None}
+        return new_layout

@@ -6,6 +6,7 @@ class Film:
     title: str
     priority: int
     categories: tuple[str, ...] #kvůli zmrazení tuple a je to seznam kategorií, do kterých daný film patří
+    region: tuple[str, ...] = ("cz", "sk") #pokud nezadáno, tak automatická dostupnost pro obě země
     
 @dataclass(frozen=True)
 class CategoryRule:

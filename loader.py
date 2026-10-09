@@ -19,7 +19,19 @@ def get_movie_categories(row, categories, excel_row, display_title, ignored_film
     return tuple(valid_cats) #list s kategoriemi, do kterých daný film patří
 
 def get_all_category_names(df) -> list[str]: #vrátí hlavičku pokud není označení jako id film nebo priorita, tedy vrátí kategorie
-    return [col for col in df.columns if col not in {"ID", "Film", "Priorita"}]
+    return [col for col in df.columns if col not in {"ID", "Film", "Priorita", "Dostupnost"}]
+
+def parse_region(val) -> tuple[str, ...]:
+    cleaned_val = str(val).strip().lower()
+    
+    if pd.isna(val) or not cleaned_val or cleaned_val == "nan" or ("cz" in cleaned_val and "sk" in cleaned_val):
+        return ("cz", "sk")
+    if "cz" in cleaned_val:
+        return ("cz",)
+    elif "sk" in cleaned_val:
+        return ("sk",)
+    else:
+        return ("cz", "sk")
 
 def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule], list[str]]:
     ignored_films = []
@@ -38,6 +50,8 @@ def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule],
         missing_cols = required_cols - set(df.columns)
         missing_str = ", ".join(missing_cols)
         raise ValueError(f"Vybraná databáze neobsahuje povinné sloupce. Chybí: {missing_str}")
+    if "Dostupnost" not in df.columns:
+        df["Dostupnost"] = pd.NA
     
     categories = get_all_category_names(df)
     df["_excel_row"] = df.index + 2 # Uloží původní čísla řádků z Excelu pro chybové hlášky, hlavička = +1 a pandas začíná na 0 takže další +1; vytváří nový pomocný sloupec
@@ -79,14 +93,14 @@ def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule],
         if film_cats is None:
             continue
         
+        film_region = parse_region(row["Dostupnost"])
         seen_ids.add(film_id)
         seen_titles.add(title_cf)
-        new_film = dt.Film(id = film_id, title = raw_title, priority = priority, categories = film_cats)
+        new_film = dt.Film(id = film_id, title = raw_title, priority = priority, categories = film_cats, region = film_region)
         valid_films.append(new_film)
         
     if not valid_films:
         raise ValueError("Databáze neobsahuje žádný platný film k zařazení.")
-    
     if not categories:
         raise ValueError("Databáze neobsahuje žádné sloupce s kategoriemi.")
     
