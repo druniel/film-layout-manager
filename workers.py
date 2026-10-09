@@ -27,7 +27,6 @@ class BuilderWorker(QThread):
         self.films = films
         self.category_rules = category_rules
         self.layout_backup = layout_backup # Záloha tabulky potřebná pro Fázi 2
-        self.is_smart_switch = False
         
     def run(self):
         try:

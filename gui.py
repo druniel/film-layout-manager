@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
             
             if self.table_model and self.current_layout:
                 self.table_model.update_data(self.current_layout.result_table)
-            self.statusBar().showMessage("Upravuji tabulku pro nový region a doplňuji z rebufferu...")
+            self.statusBar().showMessage(f"Tabulka byla úspěšně upravena pro {new_region.upper()}.", 5000)
             
         elif self.films and self.category_rules:
                 self.create_unique_films()
@@ -189,28 +189,21 @@ class MainWindow(QMainWindow):
         self.worker.finished.connect(self.worker.deleteLater)
         self.worker.start()
         
-    def fill_from_rebuffer(self, custom_backup = None, is_smart_switch = False):
+    def fill_from_rebuffer(self, custom_backup = None):
         if self.is_busy: return
         
-        if isinstance(custom_backup, bool) or custom_backup is None:
-            backup_to_use = self.current_layout if self.current_layout else self.phase1_layout
-        else:
-            backup_to_use = custom_backup
+        backup_to_use = self.current_layout if self.current_layout else self.phase1_layout
         
         if not backup_to_use:
             QMessageBox.information(self, "Upozornění", "Doplňování lze spustit až po vytvoření unikátního rozvrhu.")
             return
         
         valid_films = [f for f in self.films if self.current_region in f.region]
-        
-        if not is_smart_switch:
-            self.statusBar().showMessage("Doplňuji prázdná místa z rebufferu...")
-            
+        self.statusBar().showMessage("Doplňuji prázdná místa z rebufferu...")
         self.set_ui_busy(True)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         safe_backup = copy.deepcopy(backup_to_use)
         self.worker = BuilderWorker(phase = 2, films = valid_films, category_rules = self.category_rules, layout_backup = safe_backup)
-        self.worker.is_smart_switch = is_smart_switch
         self.worker.finished_signal.connect(self._on_phase2_finished)
         self.worker.error_signal.connect(self._on_worker_error)
         self.worker.finished.connect(self._cleanup_worker)
@@ -342,10 +335,7 @@ class MainWindow(QMainWindow):
         self.region_layouts[self.current_region] = copy.deepcopy(self.current_layout)
         if self.table_model:
             self.table_model.update_data(self.current_layout.result_table)
-        if getattr(self.worker, "is_smart_switch", False):
-            self.statusBar().showMessage(f"Tabulka byla úspěšně upravena pro {self.current_region.upper()}.", 5000)
-        else:
-            self.statusBar().showMessage(self.current_layout.message, 5000)
+        self.statusBar().showMessage(self.current_layout.message, 5000)
                 
     def _on_worker_error(self, error_msg, state):
         self.recovery_state = state
@@ -411,7 +401,6 @@ class MainWindow(QMainWindow):
             save_credentials(self.current_api_url, self.current_token)
         QMessageBox.information(self, "Hotovo", message)
         
-            
     def _on_token_expired(self):
         self.recovery_state = None
         self.statusBar().clearMessage()
@@ -466,32 +455,6 @@ class MainWindow(QMainWindow):
         else:
             self.ui.btn_cz.setStyleSheet(self.STYLE_LANG_BTN_INACTIVE)
             self.ui.btn_sk.setStyleSheet(self.STYLE_LANG_BTN_ACTIVE)
-            
-    def _filter_layout_for_region(self, layout, valid_ids):
-        new_layout = copy.deepcopy(layout)
-        
-        for c_idx in range(len(self.category_rules)):
-            col_ids = []
-            col_titles = []
-            for r_idx in range(len(new_layout.id_table)):
-                f_id = new_layout.id_table[r_idx][c_idx]
-                f_title = new_layout.result_table[r_idx][c_idx]
-                if f_id is not None and f_id in valid_ids:
-                    col_ids.append(f_id)
-                    col_titles.append(f_title)
-            cat_name = self.category_rules[c_idx].name
-            new_layout.category_counts[cat_name] = len(col_ids)
-            
-            for r_idx in range(len(new_layout.id_table)):
-                if r_idx < len(col_ids):
-                    new_layout.id_table[r_idx][c_idx] = col_ids[r_idx]
-                    new_layout.result_table[r_idx][c_idx] = col_titles[r_idx]
-                else:
-                    new_layout.id_table[r_idx][c_idx] = None
-                    new_layout.result_table[r_idx][c_idx] = ""
-                    
-        new_layout.used_films = {f_id for row in new_layout.id_table for f_id in row if f_id is not None}
-        return new_layout
     
     def _smart_swap_layout(self, layout, valid_films, new_region):
         new_layout = copy.deepcopy(layout)

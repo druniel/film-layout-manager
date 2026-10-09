@@ -21,7 +21,7 @@ class ApiWorker(QThread):
         url = f"{self.api_url}{endpoint}"
         
         if "headers" not in kwargs:
-            kwargs["headers"] = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+            kwargs["headers"] = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json", "Accept-Language": "cs"}
             
         max_retries = 3 if retry else 1
         last_error = None
