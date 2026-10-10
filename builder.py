@@ -27,17 +27,18 @@ def _build_flow_graph(films: list[dt.Film], category_rules: list[dt.CategoryRule
         G.add_node(movie_node)
         
         match film.priority: #čím menší váha, tím raději algoritmus film použije
-            case 1: weight = -1000000000
-            case 2: weight = -1000000
-            case 3: weight = -10000
-            case _: weight = -10
+            case 1: weight = -10000000000000000
+            case 2: weight = -1000000000000
+            case 3: weight = -100000000
+            case 4: weight = -10000
+            case _: weight = -1
             
         G.add_edge("S", movie_node, capacity=1, weight=weight) #propojení uzlu zdroje > s uzlem filmu; kapacita = ze zdroje do uzlu film může jít logicky jen 1 film
         original_columns = film_to_col.get(film.id, []) # ve kterých sloupcích (čísla) už tento konkrétní film leží (pro Fázi 2)
         
         for cat_name in film.categories: #prochází všechny kategorie do kterých film patří
             try:
-                col_idx = next(i for i, r in enumerate(category_rules) if r.name == cat_name) # číslo sloupce dané kategorie
+                col_idx = next(i for i, r in enumerate(category_rules) if r.name == cat_name) # číslo sloupce dané kategorie, generátor proto, že najde první výskyt a tím končí
             except StopIteration:
                 continue # pokud kategorie není v pravidlech, přeskočí se
                 
@@ -85,7 +86,7 @@ def generate_layout(films: list[dt.Film], category_rules: list[dt.CategoryRule])
     used_films = set()
     film_to_col = {}
     unassigned_films = []
-    shuffled_films = list(films)
+    shuffled_films = list(films) # vytvoří nezávislou kopii
     random.shuffle(shuffled_films)
     sorted_films = sorted(shuffled_films, key=lambda f: f.priority)
     G = _build_flow_graph(sorted_films, category_rules, capacities, film_to_col, spacing=0)
@@ -123,7 +124,7 @@ def refill_empty_slots(layout: dt.LayoutResult, films: list[dt.Film], category_r
     if any(len(cols) > 2 for cols in film_to_col.values()):
         raise ValueError("Kritická chyba: Vstupní rozvržení porušuje pravidlo maximálně 2 výskytů na film.")
     
-    eligible_films = [f for f in films if len(film_to_col.get(f.id, [])) < 2] # Vyfiltruje z databáze POUZE ty filmy, které jsou v tabulce méně než dvakrát, tedy 1x
+    eligible_films = [f for f in films if len(film_to_col.get(f.id, [])) < 2] # Vyfiltruje z databáze POUZE ty filmy, které jsou v tabulce jen 1x
     shuffled_films = list(eligible_films)
     random.shuffle(shuffled_films)
     remaining_caps = {rule.name: rule.capacity - layout.category_counts.get(rule.name, 0) for rule in category_rules}

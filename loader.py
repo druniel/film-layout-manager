@@ -15,10 +15,10 @@ def get_movie_categories(row, categories, excel_row, display_title, ignored_film
             valid_cats.append(cat)
         elif val not in falsy:
             ignored_films.append(f"Řádek {excel_row}: '{display_title}' - Neplatná hodnota '{row[cat]}' v kategorii '{cat}'.")
-            return None
+            return None # jakmile narazí na neplatnou hodnotu, ukončí celou funkci
     return tuple(valid_cats) #list s kategoriemi, do kterých daný film patří
 
-def get_all_category_names(df) -> list[str]: #vrátí hlavičku pokud není označení jako id film nebo priorita, tedy vrátí kategorie
+def get_all_category_names(df) -> list[str]: #vrátí hlavičku pokud není označená jako id film nebo priorit; tedy vrátí jen kategorie
     return [col for col in df.columns if col not in {"ID", "Film", "Priorita", "Dostupnost"}]
 
 def parse_region(val) -> tuple[str, ...]:
@@ -54,6 +54,9 @@ def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule],
         df["Dostupnost"] = pd.NA
     
     categories = get_all_category_names(df)
+    if not categories:
+        raise ValueError("Databáze neobsahuje žádné sloupce s kategoriemi.")
+        
     df["_excel_row"] = df.index + 2 # Uloží původní čísla řádků z Excelu pro chybové hlášky, hlavička = +1 a pandas začíná na 0 takže další +1; vytváří nový pomocný sloupec
     df = df.dropna(how='all', subset=['ID', 'Film', 'Priorita']) # vyhodí prázdné řádky, resp ty, které nemají vyplněné žádné udaje u id film a priorita
     df["ID_num"] = pd.to_numeric(df["ID"], errors='coerce') #převádí první sloupec s prioritami na čísla a nečíselné hodnoty na NaN; vytváří nový pomocný sloupec
@@ -89,11 +92,12 @@ def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule],
             continue
         
         priority = int(raw_priority)
+        film_region = parse_region(row["Dostupnost"])
+        
         film_cats = get_movie_categories(row, categories, excel_row, raw_title, ignored_films)
         if film_cats is None:
             continue
         
-        film_region = parse_region(row["Dostupnost"])
         seen_ids.add(film_id)
         seen_titles.add(title_cf)
         new_film = dt.Film(id = film_id, title = raw_title, priority = priority, categories = film_cats, region = film_region)
@@ -101,8 +105,6 @@ def load_database(file_path: str) -> tuple[list[dt.Film], list[dt.CategoryRule],
         
     if not valid_films:
         raise ValueError("Databáze neobsahuje žádný platný film k zařazení.")
-    if not categories:
-        raise ValueError("Databáze neobsahuje žádné sloupce s kategoriemi.")
     
     random.shuffle(valid_films)
     category_rules = [dt.CategoryRule(name = cat, capacity = capacity_exceptions.get(cat, 10)) for cat in categories]

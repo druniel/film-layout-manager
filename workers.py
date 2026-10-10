@@ -21,7 +21,7 @@ class BuilderWorker(QThread):
     finished_signal = Signal(object) # vrací hotový dt.LayoutResult
     error_signal = Signal(str)
     
-    def __init__(self, phase: int, films: list[dt.Film], category_rules: list[dt.CategoryRule], layout_backup: dt.LayoutResult | None = None):
+    def __init__(self, phase: int, films: list[dt.Film], category_rules: list[dt.CategoryRule], layout_backup: dt.LayoutResult | None = None): # layoutbackup očekává buď objekt nebo none a výchozí hodnotou je none
         super().__init__()
         self.phase = phase
         self.films = films

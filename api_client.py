@@ -47,7 +47,7 @@ class ApiWorker(QThread):
             except RequestException as e:
                 last_error = e
                 
-            if retry and attempt < max_retries -1:
+            if retry and attempt < max_retries - 1:
                 time.sleep(2)
         
         raise Exception(f"Chyba komunikace s API: {max_retries} pokusů selhalo. Poslední chyba: {last_error}")
@@ -82,6 +82,7 @@ class ApiWorker(QThread):
                         raise Exception(f"Kategorie '{cat_name}' se na homepage vyskytuje vícekrát ({occurrences}x). Mapování není jednoznačné.")
             
                 draft_payload = {"country": country_id, "name": current_name, "template": current_id}
+                
                 try:
                     draft_data = self._make_request("POST", "/admin/homepages", json = draft_payload)
                     if draft_data is None: return
@@ -122,9 +123,6 @@ class ApiWorker(QThread):
                     if len(plays_list) != len(set(plays_list)):
                         raise Exception(f"Kritická chyba: Do sekce '{section_name}' se snažíte odeslat duplicitní ID.")
                     update_payload = {"custom_names": custom_names_list, "landing_page": is_landing_page, "names": section_detail.get("names", []), "plays": plays_list}
-                    print(f"\n--- ODESÍLÁM PAYLOAD PRO SEKCI: {section_name} (ID: {section_id}) ---")
-                    print(json.dumps(update_payload, indent=2, ensure_ascii=False))
-                    print("---------------------------------------------------\n")
                     self._make_request("PUT", f"/admin/sections/{section['id']}", json = update_payload)
                     self.state["completed_sections"].append(section_id)
                     

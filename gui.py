@@ -148,9 +148,6 @@ class MainWindow(QMainWindow):
                 self.table_model.update_data(self.current_layout.result_table)
             self.statusBar().showMessage(f"Tabulka byla úspěšně upravena pro {new_region.upper()}.", 5000)
             
-        elif self.films and self.category_rules:
-                self.create_unique_films()
-        
     def toggle_menu(self):
         self.is_menu_expanded = not self.is_menu_expanded
         self._apply_menu_state()
@@ -317,9 +314,9 @@ class MainWindow(QMainWindow):
             self.ui.btn_rebuffer.setEnabled(bool(self.phase1_layout))
             self.ui.btn_reset.setEnabled(bool(self.phase1_layout))
             self.ui.btn_send.setEnabled(bool(self.phase1_layout))
-            self.ui.btn_cz.setEnabled(True)
-            self.ui.btn_sk.setEnabled(True)
-            self.ui.btn_lang_collapsed.setEnabled(True)
+            self.ui.btn_cz.setEnabled(bool(self.films and self.category_rules))
+            self.ui.btn_sk.setEnabled(bool(self.films and self.category_rules))
+            self.ui.btn_lang_collapsed.setEnabled(bool(self.films and self.category_rules))
                 
     def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavře se
         if getattr(self, "is_busy", False):
@@ -337,7 +334,7 @@ class MainWindow(QMainWindow):
             self.table_model.update_data(self.current_layout.result_table)
         self.statusBar().showMessage(self.current_layout.message, 5000)
                 
-    def _on_worker_error(self, error_msg, state):
+    def _on_worker_error(self, error_msg, state = None):
         self.recovery_state = state
         self.statusBar().clearMessage()
         QMessageBox.critical(self, "Chyba", error_msg)
