@@ -1,15 +1,15 @@
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QInputDialog, QCheckBox, QDialog, QVBoxLayout, QFormLayout, QComboBox, QPushButton, QLineEdit
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QFileDialog, QHeaderView, QApplication, QCheckBox, QDialog, QVBoxLayout, QFormLayout, QPushButton, QLineEdit
 from PySide6.QtCore import Qt, QSize, QItemSelectionModel, QThread
 from PySide6.QtGui import QShortcut, QKeySequence
 import qtawesome as qta
 import copy
+import unicodedata
 import data_types as dt
 from ui_main import Ui_MainWindow
 from security import save_credentials, load_credentials
 from workers import LoaderWorker, BuilderWorker
 from models import FilmTableModel
 from api_client import ApiWorker
-import unicodedata
         
 class CMSDialog(QDialog):
     def __init__(self, parent = None):
@@ -22,7 +22,7 @@ class CMSDialog(QDialog):
         self.api_url.setPlaceholderText("Vložte URL API...")
         self.input_token = QLineEdit()
         self.input_token.setPlaceholderText("Vložte Access token...")
-        # self.input_token.setEchoMode(QLineEdit.EchoMode.Password) skryje token
+        self.input_token.setEchoMode(QLineEdit.EchoMode.Password)
         form_layout.addRow("API:", self.api_url)
         form_layout.addRow("Access token:", self.input_token)
         self.btn_submit = QPushButton("Odeslat")
@@ -58,19 +58,24 @@ class MainWindow(QMainWindow):
         QPushButton:disabled {color: gray;}
     """
     STYLE_LANG_BTN_ACTIVE = """
-        QPushButton {background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-radius: 0px; padding: 10px 0px; text-align: center;}
+        QPushButton {background-color: rgba(255, 255, 255, 0.2); color: white; font-weight: bold; border-radius: 0px; padding: 7px 0px; text-align: center;}
         QPushButton:disabled {background-color: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.3);}
     """
     STYLE_LANG_BTN_INACTIVE = """
-        QPushButton {background-color: transparent; color: white; font-weight: normal; border: none; padding: 10px 0px; text-align: center;}
+        QPushButton {background-color: transparent; color: white; font-weight: normal; border: none; padding: 7px 0px; text-align: center;}
         QPushButton:hover {background-color: rgba(255, 255, 255, 0.1);}
         QPushButton:disabled {color: rgba(255, 255, 255, 0.3);}
     """
-    
     STYLE_LANG_COLLAPSED = """
-            QPushButton {text-align: center; padding: 10px 0px; background-color: transparent; color: white; border: none; font-weight: bold;}
-            QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 0px;}
-        """
+        QPushButton {text-align: center; padding: 7px 0px; background-color: transparent; color: white; border: none; font-weight: bold;}
+        QPushButton:hover {background-color: rgba(255, 255, 255, 0.1); border-radius: 0px;}
+    """  
+    STYLE_SEARCH_FIELD_STATIC = """
+        QLineEdit {background-color: rgba(255, 255, 255, 0.1); color: white; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 4px; padding: 5px; margin: 10px 5px;}
+    """     
+    STYLE_SEARCH_FIELD_FLOATING = """
+        QLineEdit {background-color: rgba(25, 25, 25, 0.90); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; padding: 5px;}
+    """
     
     def __init__(self):
         super().__init__()
@@ -82,14 +87,15 @@ class MainWindow(QMainWindow):
         self.region_layouts: dict[str, dt.LayoutResult | None] = {"cz": None, "sk": None}
         self.worker: QThread | None = None
         self.is_busy = False
+        self.is_menu_expanded = False
         self.table_model = None
         self.current_api_url = None
         self.current_token = None
         self.current_region = "cz"
-        self.ui = Ui_MainWindow()
         self.recovery_state = None
+        self.ui = Ui_MainWindow()
         self.ui.setupUi(self) # načte design z ui_main.py
-        self.setWindowTitle("Filmana generátor rozvržení filmů")
+        self.setWindowTitle("Filmana - generátor rozvržení filmů")
         self.ui.tableView.verticalHeader().setVisible(False)
         self.ui.btn_menu.setIcon(qta.icon('fa5s.bars', color='white'))
         self.ui.btn_load.setIcon(qta.icon('fa5s.folder-open', color='white'))
@@ -97,7 +103,9 @@ class MainWindow(QMainWindow):
         self.ui.btn_rebuffer.setIcon(qta.icon('fa5s.puzzle-piece', color='white', color_disabled='gray'))
         self.ui.btn_reset.setIcon(qta.icon('fa5s.sync-alt', color='white', color_disabled='gray'))
         self.ui.btn_send.setIcon(qta.icon('fa5s.cloud-upload-alt', color='white', color_disabled='gray'))
+        self.ui.btn_search.setIcon(qta.icon('fa5s.search', color='white', color_disabled='gray'))
         self.ui.btn_exit.setIcon(qta.icon('fa5s.times', color='white'))
+        self.ui.search_field.setStyleSheet(self.STYLE_SEARCH_FIELD_STATIC)
         self.ui.tableView.setStyleSheet("QHeaderView::section {font-weight: bold; font-size: 14px;}")
         self.ui.tableView.setWordWrap(True)
         self.ui.btn_cz.clicked.connect(lambda: self.switch_region("cz"))
@@ -110,10 +118,18 @@ class MainWindow(QMainWindow):
         self.ui.btn_rebuffer.clicked.connect(self.fill_from_rebuffer)
         self.ui.btn_reset.clicked.connect(self.reset_table)
         self.ui.btn_send.clicked.connect(self.send_to_cms)
-        self.ui.btn_exit.clicked.connect(self.close)
+        self.ui.btn_search.clicked.connect(self.show_floating_search)
+        self.ui.search_field.textChanged.connect(self.search_film)
+        self._original_mouse_press = self.ui.search_field.mousePressEvent
+        self.ui.search_field.mousePressEvent = self._on_search_click
         self.shortcut_search = QShortcut(QKeySequence("Ctrl+F"), self)
-        self.shortcut_search.activated.connect(self.search_film)
-        self.is_menu_expanded = False
+        self.shortcut_search.activated.connect(self.focus_search)
+        self.shortcut_menu = QShortcut(QKeySequence("Ctrl+M"), self)
+        self.shortcut_menu.activated.connect(self.toggle_menu)
+        self.shortcut_esc = QShortcut(QKeySequence("Esc"), self)
+        self.shortcut_esc.activated.connect(self.hide_floating_search)
+        self.ui.search_field.editingFinished.connect(self.hide_floating_search)
+        self.ui.btn_exit.clicked.connect(self.close)
         self._apply_menu_state()
         self.set_ui_busy(False) # povypíná tlačítka, protože zatím nemáme data
         
@@ -130,15 +146,16 @@ class MainWindow(QMainWindow):
         if self.current_layout:
             self.region_layouts[old_region] = copy.deepcopy(self.current_layout)
             
-        if self.region_layouts.get(new_region):
+        if self.region_layouts.get(new_region): # pokud už existuje tabulka regionu kam se přepíná
             self.current_layout = copy.deepcopy(self.region_layouts[new_region])
             self.phase1_layout = copy.deepcopy(self.current_layout)
+            
             if self.table_model and self.current_layout:
                 self.table_model.update_data(self.current_layout.result_table)
             self.statusBar().showMessage(f"Obnoveno předchozí rozvržení pro {new_region.upper()}.", 5000)
             return
         
-        if self.films and self.category_rules and self.region_layouts.get(old_region):
+        if self.films and self.category_rules and self.region_layouts.get(old_region): # pokud se tabulka regionu kam se přepíná teprve musí vytvořit
             valid_films = [f for f in self.films if new_region in f.region]
             self.current_layout = self._smart_swap_layout(self.region_layouts[old_region], valid_films, new_region)
             self.phase1_layout = copy.deepcopy(self.current_layout)
@@ -188,7 +205,6 @@ class MainWindow(QMainWindow):
         
     def fill_from_rebuffer(self, custom_backup = None):
         if self.is_busy: return
-        
         backup_to_use = self.current_layout if self.current_layout else self.phase1_layout
         
         if not backup_to_use:
@@ -222,7 +238,6 @@ class MainWindow(QMainWindow):
             self.set_ui_busy(False)
             self.statusBar().showMessage("Tabulka resetována.", 5000)
         
-    
     def send_to_cms(self):
         if self.is_busy: return
         if not self.phase1_layout or not self.current_layout:
@@ -260,39 +275,70 @@ class MainWindow(QMainWindow):
             self.worker.finished.connect(self.worker.deleteLater)
             self.worker.start()
             
-    def search_film(self):
-        if not self.table_model or not self.current_layout or not self.current_layout.used_films:
-            QMessageBox.information(self, "Hledání", "Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
-            return
-            
-        text, ok = QInputDialog.getText(self, "Vyhledávání", "Zadejte název filmu:")
+    def search_film(self): 
+        if not self.table_model: return
+        text = self.ui.search_field.text()
         
-        if ok and text:
-            def strip_accents(s):
-                return "".join(c for c in unicodedata.normalize("NFD", str(s)) if unicodedata.category(c) != "Mn")
-            
-            search_query = strip_accents(text.lower().strip())
-            found = False
+        if not text:
             self.ui.tableView.clearSelection()
+            self.statusBar().clearMessage()
+            return
+        
+        def strip_accents(s):
+            return "".join(c for c in unicodedata.normalize("NFD", str(s)) if unicodedata.category(c) != "Mn")
             
-            for r in range(self.table_model.rowCount()):
-                for c in range(self.table_model.columnCount()):
-                    index = self.table_model.index(r, c)
-                    cell_data = self.table_model.data(index)
+        search_query = strip_accents(text.lower().strip())
+        found = False
+        self.ui.tableView.clearSelection()
+            
+        for r in range(self.table_model.rowCount()):
+            for c in range(self.table_model.columnCount()):
+                index = self.table_model.index(r, c)
+                cell_data = self.table_model.data(index)
                     
-                    if cell_data:
-                        clean_cell = strip_accents(str(cell_data).lower())
-                        if search_query in clean_cell:
-                            self.ui.tableView.selectionModel().select(index, QItemSelectionModel.SelectionFlag.Select)
+                if cell_data:
+                    clean_cell = strip_accents(str(cell_data).lower())
+                    if search_query in clean_cell:
+                        self.ui.tableView.selectionModel().select(index, QItemSelectionModel.SelectionFlag.Select)
                         
                         if not found:
                             self.ui.tableView.scrollTo(index)
                             found = True
             
-            if found:
-                self.statusBar().showMessage(f"Hledání pro '{text}' dokončeno.", 5000)
-            else:
-                QMessageBox.information(self, "Hledání", f"Film '{text}' nebyl nalezen.")
+        if found:
+            self.statusBar().showMessage(f"Hledání pro '{text}' dokončeno.", 5000)
+        else:
+            self.statusBar().showMessage(f"Film '{text}' nebyl nalezen.", 5000)
+            
+    def focus_search(self):
+        if not self.table_model or not self.current_layout or not self.current_layout.used_films:
+            QMessageBox.information(self, "Hledání", "Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
+            return
+        if not self.ui.search_field.isEnabled(): return
+        if self.is_menu_expanded:
+            self.ui.search_field.setFocus()
+        else:
+            self.show_floating_search()
+            
+    def show_floating_search(self):
+        if not self.table_model or not self.current_layout or not self.current_layout.used_films:
+            QMessageBox.information(self, "Hledání", "Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
+            return
+        if self.ui.search_field.isVisible() and self.ui.search_field.parent() == self.ui.centralwidget:
+            self.ui.search_field.setFocus()
+            return
+        
+        self.ui.search_field.setParent(self.ui.centralwidget)
+        self.ui.search_field.setGeometry(50, self.ui.btn_search.y(), 200, 25)
+        self.ui.search_field.setFixedHeight(25)
+        self.ui.search_field.setStyleSheet(self.STYLE_SEARCH_FIELD_FLOATING)
+        self.ui.search_field.show()
+        self.ui.search_field.raise_()
+        self.ui.search_field.setFocus()
+    
+    def hide_floating_search(self):
+        if not self.is_menu_expanded:
+            self.ui.search_field.hide()
                 
     def set_ui_busy(self, busy: bool): # chrání aplikaci proti zběsilému klikání uživatele
         self.is_busy = busy
@@ -307,6 +353,8 @@ class MainWindow(QMainWindow):
             self.ui.btn_cz.setEnabled(False)
             self.ui.btn_sk.setEnabled(False)
             self.ui.btn_lang_collapsed.setEnabled(False)
+            self.ui.search_field.setEnabled(False)
+            self.ui.btn_search.setEnabled(False)
         else:
             self.ui.btn_load.setEnabled(True)
             self.ui.btn_exit.setEnabled(True)
@@ -317,6 +365,8 @@ class MainWindow(QMainWindow):
             self.ui.btn_cz.setEnabled(bool(self.films and self.category_rules))
             self.ui.btn_sk.setEnabled(bool(self.films and self.category_rules))
             self.ui.btn_lang_collapsed.setEnabled(bool(self.films and self.category_rules))
+            self.ui.search_field.setEnabled(True)
+            self.ui.btn_search.setEnabled(True)
                 
     def closeEvent(self, event): # Pokud aplikace zrovna pracuje na pozadí, nezavře se
         if getattr(self, "is_busy", False):
@@ -344,7 +394,7 @@ class MainWindow(QMainWindow):
     def _on_phase1_finished(self, layout_result): 
         self.statusBar().clearMessage()
         self.current_layout = layout_result
-        self.phase1_layout = copy.deepcopy(self.current_layout) # Tvrdá záloha čistého výsledku pomocí (zabrání problémům se sdílenou pamětí)
+        self.phase1_layout = copy.deepcopy(self.current_layout)
         self.region_layouts[self.current_region] = copy.deepcopy(self.current_layout)
         other_region = "sk" if self.current_region == "cz" else "cz"
         self.region_layouts[other_region] = None
@@ -406,7 +456,7 @@ class MainWindow(QMainWindow):
         self.send_to_cms()
             
     def _apply_menu_state(self):
-        buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_send, self.ui.btn_exit]
+        buttons = [self.ui.btn_menu, self.ui.btn_load, self.ui.btn_create, self.ui.btn_rebuffer, self.ui.btn_reset, self.ui.btn_send, self.ui.btn_exit, self.ui.btn_search]
                 
         if self.is_menu_expanded:
             new_width = 200
@@ -422,6 +472,10 @@ class MainWindow(QMainWindow):
             self.ui.btn_rebuffer.show()
             self.ui.btn_reset.show()
             self.ui.btn_send.show()
+            self.ui.search_field.setStyleSheet(self.STYLE_SEARCH_FIELD_STATIC)
+            self.ui.verticalLayout.insertWidget(7, self.ui.search_field)
+            self.ui.search_field.show()
+            self.ui.btn_search.hide()
             self.ui.widget_lang_expanded.show()
             self.ui.btn_lang_collapsed.hide()
         else:
@@ -438,6 +492,8 @@ class MainWindow(QMainWindow):
             self.ui.btn_rebuffer.hide()
             self.ui.btn_reset.hide()
             self.ui.btn_send.hide()
+            self.ui.search_field.hide()
+            self.ui.btn_search.show()
             self.ui.widget_lang_expanded.hide()
             self.ui.btn_lang_collapsed.show()
                 
@@ -463,7 +519,6 @@ class MainWindow(QMainWindow):
                 
                 if f_id is not None and f_id not in valid_ids:
                     old_title = new_layout.result_table[r_idx][c_idx]
-                    
                     old_title_lower = " ".join(old_title.lower().split())
                     base_title = old_title_lower
                     
@@ -499,3 +554,10 @@ class MainWindow(QMainWindow):
                         
         new_layout.used_films = {f_id for row in new_layout.id_table for f_id in row if f_id is not None}
         return new_layout
+    
+    def _on_search_click(self, event):
+        if not self.table_model or not self.current_layout or not self.current_layout.used_films:
+            QMessageBox.information(self, "Hledání", "Není možné hledat, protože tabulka není načtena, nebo vyplněna.")
+            self.setFocus() 
+            return
+        self._original_mouse_press(event)

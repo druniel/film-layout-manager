@@ -32,9 +32,13 @@ def _build_flow_graph(films: list[dt.Film], category_rules: list[dt.CategoryRule
             case 3: weight = -100000000
             case 4: weight = -10000
             case _: weight = -1
+          
+        original_columns = film_to_col.get(film.id, []) # ve kterých sloupcích (čísla) už tento konkrétní film leží (pro Fázi 2)  
+        
+        if original_columns: # pokud film už v rozvržení je, snížím jeho atraktivitu
+            weight = int(weight * 0.001)
             
         G.add_edge("S", movie_node, capacity=1, weight=weight) #propojení uzlu zdroje > s uzlem filmu; kapacita = ze zdroje do uzlu film může jít logicky jen 1 film
-        original_columns = film_to_col.get(film.id, []) # ve kterých sloupcích (čísla) už tento konkrétní film leží (pro Fázi 2)
         
         for cat_name in film.categories: #prochází všechny kategorie do kterých film patří
             try:
@@ -69,9 +73,14 @@ def _extract_flow_results(flow_dict, films, category_rules, table, id_table, cat
             if flow_value > 0 and target_node.startswith("C_"): # pokud film protekl do daného uzlu, je to to co hledáme
                 cat_name = target_node.removeprefix("C_")
                 col_idx = cat_to_col[cat_name] #zjistí index kategorie v tabulce
-                row_idx = cat_counts.get(cat_name, 0) #dle počítadla vložených filmů v kategorii zjistí řádek kam vložit nový film
+                row_idx = None
                 
-                if row_idx < category_rules[col_idx].capacity:
+                for r in range(category_rules[col_idx].capacity): # hledá první volný řádek v daném sloupci
+                    if id_table[r][col_idx] is None:
+                        row_idx = r
+                        break
+                
+                if row_idx is not None:
                     table[row_idx][col_idx] = film.title
                     id_table[row_idx][col_idx] = film.id
                     cat_counts[cat_name] += 1
